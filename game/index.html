@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOLMAR BAY — Coastal Syndicate</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js"
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --glass: rgba(11, 18, 30, 0.72);
+      --glass-strong: rgba(9, 15, 26, 0.86);
+      --border: rgba(255, 255, 255, 0.13);
+      --cyan: #38bdf8;
+      --gold: #facc15;
+      --orange: #f97316;
+      --mint: #4ade80;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #0b1120;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    #game-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    }
+
+    .hidden { display: none !important; }
+
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    }
+
+    .hazard-top {
+      position: relative;
+      overflow: hidden;
+    }
+    .hazard-top::before {
+      content: "";
+      position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      background: repeating-linear-gradient(
+        -45deg,
+        #f59e0b,
+        #f59e0b 8px,
+        #111827 8px,
+        #111827 16px
+      );
+    }
+
+    /* ================= IN-GAME HUD ================= */
+    #hud {
+      position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    }
+
+    /* Top-Left Mission Card */
+    .hud-mission {
+      position: absolute; top: 12px; left: 14px; width: 274px;
+      padding: 11px 12px 10px;
+    }
+    .mission-head {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 5px;
+    }
+    .stage-line {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+    }
+    .stage-pill {
+      background: var(--gold); color: #0f172a; font-size: 9px; font-weight: 900;
+      padding: 2px 6px; border-radius: 3px; letter-spacing: 0.05em; flex-shrink: 0;
+    }
+    .stage-title {
+      font-size: 11.5px; font-weight: 900; font-style: italic; letter-spacing: 0.02em;
+      color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mission-segs {
+      display: flex; gap: 4px; margin-bottom: 6px;
+    }
+    .mission-segs .seg {
+      flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.16);
+    }
+    .mission-segs .seg.done { background: var(--mint); }
+    .mission-segs .seg.active { background: var(--gold); }
+    .stage-obj {
+      font-size: 11px; color: #e2e8f0; line-height: 1.3; margin-bottom: 4px;
+    }
+    .stage-next {
+      font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--cyan);
+      text-transform: uppercase;
+    }
+
+    /* Mid-Left Police Response Card */
+    .hud-police {
+      position: absolute; top: 144px; left: 14px; width: 252px;
+      padding: 9px 11px;
+    }
+    .police-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.09);
+    }
+    .police-title {
+      font-size: 10px; font-weight: 900; letter-spacing: 0.1em; color: #f87171;
+    }
+    .police-count {
+      font-size: 9.5px; font-weight: 800; color: #e2e8f0;
+      background: rgba(239, 68, 68, 0.22); border: 1px solid rgba(239, 68, 68, 0.45);
+      padding: 1px 6px; border-radius: 4px;
+    }
+    .unit-row {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10.5px;
+    }
+    .unit-icon { display: inline-flex; width: 15px; justify-content: center; flex-shrink: 0; }
+    .unit-call { font-weight: 800; color: #f8fafc; width: 68px; flex-shrink: 0; }
+    .unit-tag {
+      font-size: 8.5px; font-weight: 800; padding: 1px 5px; border-radius: 3px;
+      border: 1px solid; letter-spacing: 0.05em; white-space: nowrap;
+    }
+    .unit-dist { margin-left: auto; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .dispatch-line {
+      margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 10px; font-style: italic; color: #cbd5e1; line-height: 1.25;
+    }
+
+    /* Bottom-Left District + Minimap + Health/Armour */
+    .hud-bottom-left {
+      position: absolute; bottom: 12px; left: 14px; width: 200px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .district-card {
+      padding: 7px 10px;
+    }
+    .district-name {
+      font-size: 13px; font-weight: 900; letter-spacing: 0.06em; color: var(--gold);
+      line-height: 1.1;
+    }
+    .district-sub {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .standing-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 9px; font-weight: 800; color: #cbd5e1; margin-bottom: 3px;
+    }
+    .standing-track {
+      height: 4px; background: rgba(255,255,255,0.14); border-radius: 2px; overflow: hidden;
+    }
+    .standing-fill {
+      height: 100%; background: linear-gradient(90deg, var(--cyan), var(--mint));
+    }
+    .context-tip {
+      margin-top: 5px; font-size: 9px; font-weight: 800; letter-spacing: 0.07em;
+      color: var(--gold); background: rgba(250, 204, 21, 0.14);
+      border: 1px solid rgba(250, 204, 21, 0.35); border-radius: 4px;
+      padding: 2px 6px; text-align: center;
+    }
+    .minimap-wrap {
+      width: 158px; padding: 5px; display: flex; flex-direction: column; gap: 5px;
+    }
+    #minimap-canvas {
+      width: 146px; height: 112px; border-radius: 6px; display: block;
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    .vitals-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+    .vital-box { display: flex; flex-direction: column; gap: 2px; }
+    .vital-track {
+      height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden;
+    }
+    .vital-fill.hp { height: 100%; background: #22c55e; }
+    .vital-fill.ar { height: 100%; background: #38bdf8; }
+    .vital-meta {
+      display: flex; justify-content: space-between; font-size: 9px; font-weight: 800;
+      color: #cbd5e1; font-variant-numeric: tabular-nums;
+    }
+
+    /* Bottom-Center Dialogue Card */
+    .hud-dialogue {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      width: 418px; padding: 9px 12px; display: flex; align-items: center; gap: 11px;
+    }
+    .dlg-portrait {
+      width: 46px; height: 46px; border-radius: 6px; overflow: hidden;
+      border: 1px solid rgba(56, 189, 248, 0.45); flex-shrink: 0;
+    }
+    .dlg-speaker {
+      font-size: 10.5px; font-weight: 900; letter-spacing: 0.1em; color: var(--cyan);
+      margin-bottom: 2px;
+    }
+    .dlg-text {
+      font-size: 11.5px; color: #f1f5f9; line-height: 1.32;
+    }
+
+    /* Top-Right Status & Rank */
+    .hud-top-right {
+      position: absolute; top: 12px; right: 14px; width: 238px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    }
+    .status-box {
+      width: 100%; padding: 8px 12px; text-align: right;
+    }
+    .status-top {
+      display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px;
+    }
+    .hud-clock {
+      font-size: 12px; font-weight: 800; color: #cbd5e1; letter-spacing: 0.08em;
+    }
+    .hud-cash {
+      font-size: 23px; font-weight: 900; color: var(--mint); letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(74, 222, 128, 0.25);
+    }
+    .wanted-row {
+      display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+    }
+    .stars { font-size: 14px; letter-spacing: 2px; color: rgba(255,255,255,0.2); }
+    .stars .star.lit { color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.65); }
+    .hud-alert {
+      font-size: 9px; font-weight: 900; letter-spacing: 0.08em; padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .hud-alert.danger { background: rgba(239, 68, 68, 0.24); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.55); }
+    .hud-alert.warn { background: rgba(249, 115, 22, 0.24); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.55); }
+    .hud-alert.clear { background: rgba(74, 222, 128, 0.16); color: #86efac; border: 1px solid rgba(74, 222, 128, 0.4); }
+
+    .rank-card {
+      width: 100%; padding: 7px 11px;
+    }
+    .rank-top {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 5px;
+    }
+    .rank-pill {
+      background: var(--cyan); color: #082f49; font-size: 9px; font-weight: 900;
+      padding: 2px 6px; border-radius: 3px; letter-spacing: 0.06em;
+    }
+    .rank-title {
+      font-size: 12px; font-weight: 900; letter-spacing: 0.08em; color: #ffffff;
+    }
+    .rp-text {
+      margin-left: auto; font-size: 9.5px; font-weight: 700; color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .rp-track {
+      height: 4px; background: rgba(255,255,255,0.14); border-radius: 2px; overflow: hidden;
+    }
+    .rp-fill {
+      height: 100%; background: linear-gradient(90deg, var(--cyan), #818cf8);
+    }
+
+    /* Mid-Right Weapon Bar & Crew Ability Cards */
+    .hud-mid-right {
+      position: absolute; top: 162px; right: 14px; width: 238px;
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .weapon-bar {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+      padding: 5px;
+    }
+    .w-slot {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 4px 2px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(15, 23, 42, 0.55); color: #cbd5e1;
+    }
+    .w-slot.active {
+      border-color: var(--gold); background: rgba(250, 204, 21, 0.18); color: #fef08a;
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.25);
+    }
+    .w-key { font-size: 8.5px; font-weight: 900; opacity: 0.8; }
+    .w-icon { display: inline-flex; height: 18px; align-items: center; }
+    .w-ammo { font-size: 9px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .crew-cards { display: flex; flex-direction: column; gap: 5px; }
+    .crew-card {
+      display: flex; align-items: center; gap: 9px; padding: 6px 9px;
+      background: var(--glass); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 7px;
+    }
+    .crew-card.cooling { opacity: 0.78; }
+    .crew-portrait {
+      position: relative; width: 34px; height: 34px; border-radius: 5px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.22); flex-shrink: 0;
+    }
+    .crew-key {
+      position: absolute; top: 1px; left: 1px; background: #0f172a; color: var(--gold);
+      font-size: 8.5px; font-weight: 900; padding: 0 3px; border-radius: 2px;
+    }
+    .crew-cd {
+      position: absolute; inset: 0; background: rgba(9, 14, 24, 0.76);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 900; color: #f97316;
+    }
+    .crew-name { font-size: 10.5px; font-weight: 900; letter-spacing: 0.05em; color: #f8fafc; }
+    .crew-role { font-size: 9.5px; color: var(--muted); }
+
+    /* Bottom-Right Speedometer */
+    .hud-speed {
+      position: absolute; bottom: 12px; right: 14px; width: 224px;
+      padding: 10px 13px; text-align: right;
+    }
+    .speed-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 5px; }
+    .speed-val {
+      font-size: 38px; font-weight: 900; font-style: italic; line-height: 0.95;
+      color: #ffffff; font-variant-numeric: tabular-nums;
+    }
+    .speed-unit { font-size: 11px; font-weight: 900; color: var(--muted); letter-spacing: 0.08em; }
+    .veh-row {
+      display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+      margin-top: 4px;
+    }
+    .veh-name { font-size: 11px; font-weight: 900; color: var(--cyan); letter-spacing: 0.07em; }
+    .veh-dmg { font-size: 10px; font-weight: 800; color: #fbbf24; }
+    .radio-line {
+      margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.09);
+      font-size: 9.5px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.05em;
+    }
+
+    /* ================= PAUSE / MAP / STATS SCREEN ================= */
+    #pause-screen {
+      position: fixed; inset: 0; z-index: 30;
+      background: rgba(7, 12, 22, 0.84);
+      backdrop-filter: blur(10px);
+      display: flex; flex-direction: column;
+      padding: 10px 16px 10px;
+      gap: 10px;
+    }
+    .pause-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 16px 9px;
+    }
+    .pause-brand {
+      font-size: 18px; font-weight: 900; font-style: italic; letter-spacing: 0.08em;
+      background: linear-gradient(90deg, #ffffff, #facc15);
+      -webkit-background-clip: text; color: transparent;
+    }
+    .pause-tabs { display: flex; gap: 6px; }
+    .p-tab {
+      background: transparent; border: 1px solid transparent; color: #cbd5e1;
+      font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    }
+    .p-tab.active {
+      background: linear-gradient(90deg, #f97316, #ea580c);
+      color: #ffffff; border-color: rgba(255,255,255,0.22);
+    }
+    .pause-cash {
+      font-size: 18px; font-weight: 900; color: var(--mint); font-variant-numeric: tabular-nums;
+    }
+
+    .pause-body {
+      flex: 1; min-height: 0;
+      display: grid; grid-template-columns: 248px 1fr 258px; gap: 12px;
+    }
+    .pause-col {
+      display: flex; flex-direction: column; gap: 10px; min-height: 0;
+    }
+    .pause-panel { padding: 11px 12px; }
+    .panel-title {
+      font-size: 10px; font-weight: 900; letter-spacing: 0.12em; color: var(--cyan);
+      margin-bottom: 8px; text-transform: uppercase;
+    }
+
+    /* Completion Ring */
+    .ring-wrap {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 9px;
+    }
+    .ring-svg { width: 64px; height: 64px; flex-shrink: 0; }
+    .ring-pct { font-size: 20px; font-weight: 900; color: #ffffff; line-height: 1.05; }
+    .ring-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); }
+
+    .checklist { display: flex; flex-direction: column; gap: 5px; }
+    .check-top {
+      display: flex; justify-content: space-between; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
+    }
+    .check-val { font-weight: 800; color: var(--cyan); font-variant-numeric: tabular-nums; }
+    .check-bar { height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+    .check-fill { height: 100%; background: var(--cyan); }
+
+    .medals-row { display: flex; justify-content: space-between; gap: 6px; }
+    .medal {
+      width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 11px; font-weight: 900; border: 2px solid;
+    }
+    .medal-g { background: rgba(250,204,21,0.2); border-color: #facc15; color: #fde047; }
+    .medal-s { background: rgba(203,213,225,0.2); border-color: #cbd5e1; color: #f8fafc; }
+    .medal-b { background: rgba(249,115,22,0.2); border-color: #fb923c; color: #fdba74; }
+    .medal-none { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.16); color: #64748b; }
+
+    /* Center Map Panel */
+    .map-panel {
+      position: relative; padding: 8px; display: flex; flex-direction: column; min-height: 0;
+    }
+    #world-map-canvas {
+      width: 100%; height: 100%; border-radius: 6px; display: block; cursor: crosshair;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .map-pill {
+      position: absolute; bottom: 16px; left: 16px;
+      background: rgba(8, 13, 24, 0.88); border: 1px solid rgba(250, 204, 21, 0.5);
+      color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 5px 10px; border-radius: 999px;
+    }
+
+    /* Right Career & Save */
+    .career-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+    .career-cell {
+      background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px; padding: 6px 8px;
+    }
+    .career-k { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .career-v { font-size: 13px; font-weight: 900; color: #ffffff; font-variant-numeric: tabular-nums; }
+
+    .save-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 8px; border-radius: 6px; background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255,255,255,0.08); margin-bottom: 6px;
+    }
+    .save-row:last-child { margin-bottom: 0; }
+    .save-t { font-size: 10px; font-weight: 800; color: #f8fafc; }
+    .save-s { font-size: 9px; color: var(--muted); }
+    .save-btn {
+      background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.55);
+      color: #7dd3fc; font-size: 9.5px; font-weight: 900; padding: 4px 10px;
+      border-radius: 4px; cursor: pointer;
+    }
+    .save-btn:hover { background: rgba(56, 189, 248, 0.35); }
+
+    .pause-footer {
+      text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+      color: #cbd5e1; padding: 4px 0 2px;
+    }
+
+    /* ================= START SCREEN ================= */
+    #start-screen {
+      position: fixed; inset: 0; z-index: 20;
+      background: linear-gradient(95deg, rgba(8, 13, 24, 0.72) 0%, rgba(8, 13, 24, 0.18) 54%, rgba(8, 13, 24, 0.52) 100%);
+      pointer-events: auto;
+    }
+    .start-title-wrap {
+      position: absolute; top: 38px; left: 42px;
+    }
+    .start-title {
+      font-size: 62px; font-weight: 900; font-style: italic; letter-spacing: 0.04em;
+      line-height: 0.96;
+      background: linear-gradient(180deg, #ffffff 15%, #fde68a 62%, #f97316 100%);
+      -webkit-background-clip: text; color: transparent;
+      filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.55));
+    }
+    .start-sub {
+      margin-top: 8px; font-size: 13px; font-weight: 900; letter-spacing: 0.36em;
+      color: var(--cyan); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+    }
+
+    .start-menu {
+      position: absolute; top: 205px; left: 42px; width: 256px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .menu-btn {
+      width: 100%; text-align: left; padding: 13px 18px;
+      border-radius: 7px; border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(11, 18, 30, 0.72); backdrop-filter: blur(8px);
+      color: #f8fafc; font-size: 14px; font-weight: 900; letter-spacing: 0.12em;
+      cursor: pointer; transition: transform 0.12s ease, background 0.12s ease;
+    }
+    .menu-btn:hover { transform: translateX(4px); background: rgba(30, 41, 59, 0.86); }
+    .menu-btn.primary {
+      background: linear-gradient(90deg, #f97316 0%, #ea580c 60%, #fbbf24 100%);
+      border-color: rgba(255, 255, 255, 0.35);
+      box-shadow: 0 8px 24px rgba(249, 115, 22, 0.35);
+    }
+
+    .start-slots {
+      position: absolute; bottom: 36px; right: 42px; width: 320px;
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .start-slot-card {
+      padding: 11px 14px; border-radius: 7px;
+      background: rgba(11, 18, 30, 0.76); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-left: 4px solid #f97316;
+      cursor: pointer;
+    }
+    .start-slot-card.empty { opacity: 0.72; }
+    .slot-kicker { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; color: #ffffff; margin-bottom: 3px; }
+    .slot-meta { font-size: 10.5px; color: #cbd5e1; }
+
+    .start-tagline {
+      position: absolute; bottom: 36px; left: 42px;
+      font-size: 12px; font-weight: 600; color: #e2e8f0;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- IN-GAME HUD -->
+  <div id="hud" class="hidden">
+    <!-- Top-Left Mission Card -->
+    <div class="glass hazard-top hud-mission">
+      <div id="hud-mission-head" class="mission-head">MISSION 3 · COASTAL BREAKOUT</div>
+      <div class="stage-line">
+        <span id="hud-stage-pill" class="stage-pill">STAGE 3/4</span>
+        <span id="hud-stage-title" class="stage-title">OUTRUN THE BLOCKADE</span>
+      </div>
+      <div id="hud-mission-segs" class="mission-segs"></div>
+      <div id="hud-stage-obj" class="stage-obj">Break past Paloma Strip to Lantern Quay</div>
+      <div id="hud-stage-next" class="stage-next">NEXT: DROP THE LEDGER AT PIER 4</div>
+    </div>
+
+    <!-- Mid-Left Police Response Card -->
+    <div id="hud-police-card" class="glass hud-police">
+      <div class="police-head">
+        <span class="police-title">SBPD RESPONSE</span>
+        <span id="hud-police-count" class="police-count">4 UNITS</span>
+      </div>
+      <div id="hud-police-rows"></div>
+      <div id="hud-dispatch" class="dispatch-line"></div>
+    </div>
+
+    <!-- Bottom-Left District + Minimap + Vitals -->
+    <div class="hud-bottom-left">
+      <div class="glass district-card">
+        <div id="hud-district-name" class="district-name">PALOMA STRIP</div>
+        <div id="hud-district-sub" class="district-sub">OCEANFRONT PROMENADE</div>
+        <div class="standing-row">
+          <span>STANDING</span>
+          <span id="hud-standing-text">NEUTRAL · 58</span>
+        </div>
+        <div class="standing-track"><div id="hud-standing-fill" class="standing-fill" style="width:58%"></div></div>
+        <div id="hud-context-tip" class="context-tip hidden">DUCK BY A STALL TO HIDE</div>
+      </div>
+
+      <div class="glass minimap-wrap">
+        <canvas id="minimap-canvas" width="146" height="112"></canvas>
+        <div class="vitals-row">
+          <div class="vital-box">
+            <div class="vital-track"><div id="hud-hp-fill" class="vital-fill hp" style="width:92%"></div></div>
+            <div class="vital-meta"><span>HP</span><span id="hud-hp-val">92</span></div>
+          </div>
+          <div class="vital-box">
+            <div class="vital-track"><div id="hud-ar-fill" class="vital-fill ar" style="width:76%"></div></div>
+            <div class="vital-meta"><span>ARM</span><span id="hud-ar-val">76</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-Center Dialogue Card -->
+    <div id="hud-dialogue" class="glass hud-dialogue">
+      <div id="hud-dlg-portrait" class="dlg-portrait"></div>
+      <div>
+        <div id="hud-dlg-speaker" class="dlg-speaker">SORA VANCE</div>
+        <div id="hud-dlg-text" class="dlg-text"></div>
+      </div>
+    </div>
+
+    <!-- Top-Right Clock, Cash, Wanted, Rank -->
+    <div class="hud-top-right">
+      <div class="glass status-box">
+        <div class="status-top">
+          <span id="hud-clock" class="hud-clock">16:00</span>
+          <span id="hud-cash" class="hud-cash">¤18,450</span>
+        </div>
+        <div class="wanted-row">
+          <span id="hud-alert" class="hud-alert danger">AIR UNIT DEPLOYED</span>
+          <span id="hud-stars" class="stars"></span>
+        </div>
+      </div>
+
+      <div class="glass rank-card">
+        <div class="rank-top">
+          <span id="hud-rank-pill" class="rank-pill">RANK 5</span>
+          <span id="hud-rank-title" class="rank-title">FIXER</span>
+          <span id="hud-rp-text" class="rp-text">3,900 / 5,200 RP</span>
+        </div>
+        <div class="rp-track"><div id="hud-rp-fill" class="rp-fill" style="width:75%"></div></div>
+      </div>
+    </div>
+
+    <!-- Mid-Right Weapon Bar & Crew Abilities -->
+    <div class="hud-mid-right">
+      <div id="hud-weapon-bar" class="glass weapon-bar"></div>
+      <div id="hud-crew-cards" class="crew-cards"></div>
+    </div>
+
+    <!-- Bottom-Right Driving Speedometer -->
+    <div id="hud-speed-card" class="glass hud-speed">
+      <div class="speed-row">
+        <span id="hud-speed-val" class="speed-val">111</span>
+        <span class="speed-unit">KM/H</span>
+      </div>
+      <div class="veh-row">
+        <span id="hud-veh-name" class="veh-name">VELOCE GT-S</span>
+        <span id="hud-veh-dmg" class="veh-dmg">62% DENTED</span>
+      </div>
+      <div id="hud-radio" class="radio-line">98.4 FM · SOLMAR WAVE · SYNTHWAVE</div>
+    </div>
+  </div>
+
+  <!-- PAUSE / MAP / STATS SCREEN -->
+  <div id="pause-screen" class="hidden">
+    <div class="glass hazard-top pause-topbar">
+      <div class="pause-brand">SOLMAR BAY</div>
+      <div id="pause-tabs" class="pause-tabs"></div>
+      <div id="pause-cash" class="pause-cash">¤18,450</div>
+    </div>
+
+    <div class="pause-body">
+      <!-- Left Column -->
+      <div class="pause-col">
+        <div class="glass pause-panel" style="flex:1; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div class="ring-wrap">
+              <svg class="ring-svg" viewBox="0 0 64 64">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="6"/>
+                <circle cx="32" cy="32" r="26" fill="none" stroke="#38bdf8" stroke-width="6"
+                  stroke-dasharray="163.36" stroke-dashoffset="55.38" stroke-linecap="round"
+                  transform="rotate(-90 32 32)"/>
+              </svg>
+              <div>
+                <div class="ring-pct">66.1%</div>
+                <div class="ring-sub">COMPLETE</div>
+              </div>
+            </div>
+            <div id="pause-checklist" class="checklist"></div>
+          </div>
+
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+            <div class="panel-title" style="margin-bottom:6px;">MISSION RATINGS</div>
+            <div id="pause-medals" class="medals-row"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Map Column -->
+      <div class="glass map-panel">
+        <canvas id="world-map-canvas" width="560" height="420"></canvas>
+        <div id="map-waypoint-pill" class="map-pill">WAYPOINT · LANTERN QUAY DROP</div>
+      </div>
+
+      <!-- Right Column -->
+      <div class="pause-col">
+        <div class="glass pause-panel">
+          <div class="panel-title">SYNDICATE RANK</div>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;">
+            <span id="pause-rank-title" style="font-size:13px; font-weight:900;">RANK 5 · FIXER</span>
+            <span id="pause-rank-rp" style="font-size:9.5px; color:#94a3b8;">3,900 / 5,200 RP</span>
+          </div>
+          <div class="rp-track" style="margin-bottom:6px;"><div id="pause-rank-fill" class="rp-fill" style="width:75%"></div></div>
+          <div style="font-size:10px; color:#cbd5e1;">Next Unlock: <strong style="color:#facc15;">Coral Key Helipad &amp; Apex Drum Mag</strong></div>
+        </div>
+
+        <div class="glass pause-panel">
+          <div class="panel-title">CAREER</div>
+          <div id="pause-career-grid" class="career-grid"></div>
+        </div>
+
+        <div class="glass pause-panel" style="flex:1;">
+          <div class="panel-title">SAVE SLOTS</div>
+          <div id="pause-save-slots"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pause-footer">ESC resume · Q / E switch tab · click the map to set a waypoint</div>
+  </div>
+
+  <!-- START SCREEN -->
+  <div id="start-screen" class="hidden">
+    <div class="start-title-wrap">
+      <div class="start-title">SOLMAR BAY</div>
+      <div class="start-sub">COASTAL SYNDICATE</div>
+    </div>
+
+    <div class="start-menu">
+      <button id="btn-continue" class="menu-btn primary">CONTINUE</button>
+      <button id="btn-newgame" class="menu-btn">NEW GAME</button>
+      <button id="btn-loadgame" class="menu-btn">LOAD GAME</button>
+      <button id="btn-settings" class="menu-btn">SETTINGS</button>
+    </div>
+
+    <div id="start-slots" class="start-slots"></div>
+
+    <div class="start-tagline">An original open-world crime story along the Solmar coastline · Keyboard &amp; mouse</div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
