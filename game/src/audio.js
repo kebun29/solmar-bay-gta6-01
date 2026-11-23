@@ -1,9 +1,9 @@
 // Web Audio procedural sound engine and coastal radio synthesizer (100% offline)
 
 export const RADIO_STATIONS = [
-  { id: 0, freq: '98.4 FM', name: 'SOLMAR WAVE', genre: 'SYNTHWAVE', bpm: 112, root: 55, scale: [0, 3, 7, 10, 12, 15] },
-  { id: 1, freq: '102.7 FM', name: 'PALOMA LOUNGE', genre: 'SUNSET CHILL', bpm: 92, root: 65.41, scale: [0, 4, 7, 11, 14, 16] },
-  { id: 2, freq: '106.1 FM', name: 'QUAY PULSE', genre: 'NIGHT BASS', bpm: 124, root: 49, scale: [0, 2, 3, 7, 10, 12] },
+  { id: 0, freq: '104.9 FM', name: 'CORALINA SUNSET', genre: 'TROPICAL SYNTH', bpm: 114, root: 58.27, scale: [0, 3, 7, 10, 12, 15] },
+  { id: 1, freq: '96.3 FM', name: 'BAYSIDE NOIR', genre: 'LO-FI FUNK', bpm: 94, root: 65.41, scale: [0, 4, 7, 11, 14, 16] },
+  { id: 2, freq: '108.5 FM', name: 'MARINA PULSE', genre: 'ELECTRO HOUSE', bpm: 126, root: 51.91, scale: [0, 2, 3, 7, 10, 12] },
   { id: 3, freq: 'OFF', name: 'RADIO OFF', genre: 'ENGINE ONLY', bpm: 0, root: 0, scale: [] },
 ];
 

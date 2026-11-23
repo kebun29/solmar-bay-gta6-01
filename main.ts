@@ -1,4 +1,4 @@
-// SOLMAR BAY — Coastal Syndicate packager for make.fun gta6-01 (Node 22, standard library only).
+// CORALINA BAY: Sunset Syndicate packager for make.fun gta6-01 (Node 22, standard library only).
 // Copies the offline Three.js open-world game (game/) and showcase captures (screenshots/) into
 // the output directory and writes dossier.json via the vendored makefun-game helper.
 
@@ -18,7 +18,7 @@ const DOSSIER_CAPS = {
   game_path_max_bytes: 1000,
 };
 
-function packageSolmarBay() {
+function packageCoralinaBay() {
   mkdirSync(OUTPUT_DIR, { recursive: true });
   cpSync(join(PROJECT_ROOT, 'game'), join(OUTPUT_DIR, 'game'), { recursive: true });
 
@@ -33,4 +33,4 @@ function packageSolmarBay() {
   writeFileSync(join(OUTPUT_DIR, 'dossier.json'), dossierJson);
 }
 
-packageSolmarBay();
+packageCoralinaBay();

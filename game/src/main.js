@@ -117,11 +117,11 @@ function tick(now) {
   ui.update();
   renderer.render(scene, camera);
 
-  window.__SOLMAR_READY = true;
+  window.__CORALINA_READY = true;
   requestAnimationFrame(tick);
 }
 
 ui.update();
 renderer.render(scene, camera);
-window.__SOLMAR_READY = true;
+window.__CORALINA_READY = true;
 requestAnimationFrame(tick);
