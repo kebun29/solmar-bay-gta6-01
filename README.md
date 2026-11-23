@@ -13,3 +13,11 @@ node serve.ts
 ```
 
 Then open `http://localhost:8080` in your browser.
+
+## Highlights
+
+- **7 Coastal Districts**: Explore downtown avenues, beachfront boardwalks, marinas, and industrial docks.
+- **Dynamic Police Pursuits**: Escalating wanted levels with tactical cruisers and helicopter support.
+- **On-Foot Combat & Crew**: 5-slot weapon loadout, articulated character combat, and 3 unlockable crew abilities.
+- **Audio & Progression**: Procedural Web Audio radio/SFX and a 3-slot local save system.
+
