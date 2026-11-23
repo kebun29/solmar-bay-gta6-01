@@ -196,7 +196,7 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xe84a38) {
 
 export function createPoliceHelicopter() {
   const root = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x151d2e, metalness: 0.45, roughness: 0.32 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x24334d, metalness: 0.42, roughness: 0.34 });
   const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
   const glassMat = new THREE.MeshStandardMaterial({
     color: 0x163854,

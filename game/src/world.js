@@ -300,14 +300,14 @@ function createRoadTexture() {
   c.width = 512;
   c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#242933';
+  ctx.fillStyle = '#4f5968';
   ctx.fillRect(0, 0, 512, 512);
 
   // Subtle asphalt grain
   for (let i = 0; i < 4200; i++) {
     const x = (i * 73) % 512;
     const y = (i * 197) % 512;
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.06)';
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
     ctx.fillRect(x, y, 2, 2);
   }
 
@@ -359,10 +359,13 @@ export class World {
   }
 
   _buildLighting() {
-    this.hemiLight = new THREE.HemisphereLight(0xffd6a5, 0x2c3e50, 0.92);
+    this.ambientLight = new THREE.AmbientLight(0xffe6cc, 0.55);
+    this.scene.add(this.ambientLight);
+
+    this.hemiLight = new THREE.HemisphereLight(0xffe0b5, 0x4b5c74, 1.48);
     this.scene.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xffb870, 2.35);
+    this.sunLight = new THREE.DirectionalLight(0xffc278, 2.85);
     this.sunLight.position.set(85, 52, -75);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
@@ -377,7 +380,7 @@ export class World {
     this.scene.add(this.sunLight);
 
     // Subtle cool rim fill from the ocean side
-    this.fillLight = new THREE.DirectionalLight(0x52c4e8, 0.55);
+    this.fillLight = new THREE.DirectionalLight(0x6ad4f2, 0.85);
     this.fillLight.position.set(-60, 35, 65);
     this.scene.add(this.fillLight);
   }
@@ -406,34 +409,38 @@ export class World {
     this.skyMat.needsUpdate = true;
 
     if (night) {
-      this.scene.fog.color.setHex(0x0b1224);
-      this.scene.fog.density = 0.0095;
-      this.hemiLight.color.setHex(0x6388c2);
-      this.hemiLight.groundColor.setHex(0x231c36);
-      this.hemiLight.intensity = 0.96;
-      this.sunLight.color.setHex(0x9ac0ff);
-      this.sunLight.intensity = 1.1;
+      this.scene.fog.color.setHex(0x101a32);
+      this.scene.fog.density = 0.0082;
+      this.ambientLight.color.setHex(0x6f8bc2);
+      this.ambientLight.intensity = 0.62;
+      this.hemiLight.color.setHex(0x7ca2de);
+      this.hemiLight.groundColor.setHex(0x32294a);
+      this.hemiLight.intensity = 1.25;
+      this.sunLight.color.setHex(0xa8cbff);
+      this.sunLight.intensity = 1.45;
       this.sunLight.position.set(-55, 65, 45);
-      this.fillLight.color.setHex(0xff9a52);
-      this.fillLight.intensity = 0.78;
-      this.oceanMat.color.setHex(0x082a3e);
+      this.fillLight.color.setHex(0xffaa62);
+      this.fillLight.intensity = 1.05;
+      this.oceanMat.color.setHex(0x0c3852);
       this.lanternGlows.forEach((s) => { s.material.opacity = 0.96; });
       this.streetLights.forEach((s) => { s.material.opacity = 0.88; });
-      if (this.marketPoint1) this.marketPoint1.intensity = 28;
-      if (this.marketPoint2) this.marketPoint2.intensity = 24;
-      if (this.marketPoint3) this.marketPoint3.intensity = 20;
+      if (this.marketPoint1) this.marketPoint1.intensity = 38;
+      if (this.marketPoint2) this.marketPoint2.intensity = 34;
+      if (this.marketPoint3) this.marketPoint3.intensity = 28;
     } else {
-      this.scene.fog.color.setHex(0xdf946d);
-      this.scene.fog.density = 0.0044;
-      this.hemiLight.color.setHex(0xffd8aa);
-      this.hemiLight.groundColor.setHex(0x3a465c);
-      this.hemiLight.intensity = 0.95;
-      this.sunLight.color.setHex(0xffb468);
-      this.sunLight.intensity = 2.45;
+      this.scene.fog.color.setHex(0xe8a47c);
+      this.scene.fog.density = 0.0040;
+      this.ambientLight.color.setHex(0xffe6cc);
+      this.ambientLight.intensity = 0.58;
+      this.hemiLight.color.setHex(0xffe2b8);
+      this.hemiLight.groundColor.setHex(0x52647e);
+      this.hemiLight.intensity = 1.52;
+      this.sunLight.color.setHex(0xffc278);
+      this.sunLight.intensity = 2.85;
       this.sunLight.position.set(85, 46, -72);
-      this.fillLight.color.setHex(0x52c4e8);
-      this.fillLight.intensity = 0.58;
-      this.oceanMat.color.setHex(0x0f8fa6);
+      this.fillLight.color.setHex(0x6ad4f2);
+      this.fillLight.intensity = 0.88;
+      this.oceanMat.color.setHex(0x14a4bd);
       this.lanternGlows.forEach((s) => { s.material.opacity = 0.45; });
       this.streetLights.forEach((s) => { s.material.opacity = 0.25; });
       if (this.marketPoint1) this.marketPoint1.intensity = 4;
@@ -538,7 +545,7 @@ export class World {
     this.scene.add(westWalk);
 
     // Cross avenues heading inland
-    const crossMat = new THREE.MeshStandardMaterial({ color: 0x262c36, roughness: 0.82 });
+    const crossMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.82 });
     [-110, -35, 45, 125].forEach((z) => {
       const cross = new THREE.Mesh(new THREE.PlaneGeometry(180, 14), crossMat);
       cross.rotation.x = -Math.PI / 2;
@@ -666,10 +673,28 @@ export class World {
   }
 
   _buildNightMarket() {
-    // Lantern Quay Night Market plaza around x: -64..-22, z: 32..88
+    // Tiled Lantern Quay Night Market plaza around x: -64..-22, z: 32..88
+    const tc = document.createElement('canvas');
+    tc.width = 256;
+    tc.height = 256;
+    const tctx = tc.getContext('2d');
+    tctx.fillStyle = '#333d50';
+    tctx.fillRect(0, 0, 256, 256);
+    tctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+    tctx.lineWidth = 3;
+    for (let i = 0; i <= 256; i += 32) {
+      tctx.beginPath(); tctx.moveTo(i, 0); tctx.lineTo(i, 256); tctx.stroke();
+      tctx.beginPath(); tctx.moveTo(0, i); tctx.lineTo(256, i); tctx.stroke();
+    }
+    const tileTex = new THREE.CanvasTexture(tc);
+    tileTex.colorSpace = THREE.SRGBColorSpace;
+    tileTex.wrapS = THREE.RepeatWrapping;
+    tileTex.wrapT = THREE.RepeatWrapping;
+    tileTex.repeat.set(8, 10);
+
     const plaza = new THREE.Mesh(
       new THREE.PlaneGeometry(46, 56),
-      new THREE.MeshStandardMaterial({ color: 0x1e2430, roughness: 0.42, metalness: 0.18 })
+      new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.48, metalness: 0.14 })
     );
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.set(-44, 0.02, 60);
