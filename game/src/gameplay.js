@@ -5,6 +5,7 @@ import {
   createCharacter,
   createPatrolBoat,
   createPoliceHelicopter,
+  createScooterMesh,
   createVehicleMesh,
   createWindowShooter,
 } from './entities.js';
@@ -157,10 +158,18 @@ export class Gameplay {
     this.nitroTimer = 0;
     this.turboInstalled = false;
     this.nearbyLocation = null;
+    this.nearbyVehicle = null;
     this.activeShop = null; // 'garage' | 'arms' | null
     this.lastGunshotPos = null;
     this.lastGunshotTime = -99;
     this.roadblockPlaced = false;
+    this.impactSfxCd = 0;
+
+    // 360° Spherical Orbit Camera state
+    this.camYaw = Math.PI;
+    this.camPitch = 0.24;
+    this.camDist = 9.2;
+    this.camIdleTimer = 0;
 
     this.inVehicle = true;
     this.health = 88;
@@ -215,6 +224,7 @@ export class Gameplay {
 
     this.input = {
       w: false, a: false, s: false, d: false,
+      arrowLeft: false, arrowRight: false,
       shift: false, space: false, ctrl: false, mouseDown: false,
       mouseX: 0, mouseY: 0,
     };
@@ -502,28 +512,72 @@ export class Gameplay {
     this.burningWreck.rotation.y = Math.PI + 0.52;
     this.scene.add(this.burningWreck);
 
-    // Civilian traffic cars
+    // 14 Civilian vehicles (10 cars, taxis, convertibles + 4 scooters with riders) across all 4 lanes
     const civSpecs = [
-      { x: -6.5, z: -68, h: 0, col: 0x0ea5e9, name: 'AZURA COUPE' },
-      { x: 6.2, z: -92, h: Math.PI, col: 0xfacc15, name: 'CORAL CABRIO' },
-      { x: -6.2, z: 32, h: 0, col: 0xf8fafc, name: 'MARINA SEDAN' },
-      { x: 6.2, z: 88, h: Math.PI, col: 0x14b8a6, name: 'HARBOR VAN' },
+      { x: -8.2, z: -68, h: 0, col: 0x0ea5e9, name: 'AZURA COUPE', spd: 12 },
+      { x: 8.2, z: -92, h: Math.PI, col: 0xfacc15, name: 'CORALINA TAXI', spd: 13 },
+      { x: -4.0, z: 32, h: 0, col: 0xf8fafc, name: 'MARINA SEDAN', spd: 12 },
+      { x: 4.0, z: 88, h: Math.PI, col: 0x14b8a6, name: 'HARBOR CONVERTIBLE', spd: 13 },
+      { x: -8.2, z: -118, h: 0, col: 0xf97316, name: 'SUNSET GT', spd: 14 },
+      { x: -4.0, z: -84, h: 0, col: 0xfacc15, name: 'BAY CAB TAXI', spd: 11 },
+      { x: 4.0, z: -130, h: Math.PI, col: 0xa855f7, name: 'PALM ROADSTER', spd: 14 },
+      { x: 8.2, z: 46, h: Math.PI, col: 0x38bdf8, name: 'COASTAL COUPE', spd: 12 },
+      { x: -8.2, z: 74, h: 0, col: 0xef4444, name: 'FLAMINGO CABRIO', spd: 13 },
+      { x: 4.0, z: 128, h: Math.PI, col: 0x22c55e, name: 'VERDE HATCH', spd: 12 },
+      // 4 Coastal Scooters with riders
+      { x: -8.2, z: -146, h: 0, col: 0x22d3ee, name: 'SOLMAR SCOOTER', spd: 11, scooter: true, riderIdx: 0 },
+      { x: 8.2, z: -116, h: Math.PI, col: 0xfb7185, name: 'VESPA CORAL', spd: 12, scooter: true, riderIdx: 1 },
+      { x: -4.0, z: 102, h: 0, col: 0xfbbf24, name: 'SUNBURST MOTO', spd: 12, scooter: true, riderIdx: 2 },
+      { x: 8.2, z: 148, h: Math.PI, col: 0x34d399, name: 'BREEZE SCOOTER', spd: 11, scooter: true, riderIdx: 3 },
     ];
+    this.civilianVehicles = [];
     for (const cs of civSpecs) {
-      const v = createVehicleMesh('civilian', cs.col);
+      const v = cs.scooter
+        ? createScooterMesh(cs.col, true, cs.riderIdx || 0)
+        : createVehicleMesh('civilian', cs.col);
       v.mesh.position.set(cs.x, 0, cs.z);
       v.mesh.rotation.y = cs.h;
       this.scene.add(v.mesh);
-      this.vehicles.push({
+      const entry = {
         ...v,
         type: 'civilian',
         name: cs.name,
-        speed: 11,
+        isScooter: !!cs.scooter,
+        radius: cs.scooter ? 0.95 : 1.75,
+        laneX: cs.x,
+        baseSpeed: cs.spd || 12,
+        speed: cs.spd || 12,
         heading: cs.h,
         damagePct: 0,
-        maxSpeed: 24,
-      });
+        maxSpeed: cs.scooter ? 32 : 28,
+        parked: false,
+      };
+      this.vehicles.push(entry);
+      this.civilianVehicles.push(entry);
     }
+
+    // Parked coastal scooter ready to ride at (-10.4, 0, -35.5)
+    const parkedMesh = createScooterMesh(0x22d3ee, true, 4);
+    if (parkedMesh.riderGroup) parkedMesh.riderGroup.visible = false;
+    parkedMesh.mesh.position.set(-10.4, 0, -35.5);
+    parkedMesh.mesh.rotation.y = Math.PI - 0.15;
+    parkedMesh.mesh.visible = false; // Shown in live play; hidden during frozen ?shot= captures
+    this.scene.add(parkedMesh.mesh);
+    this.parkedScooter = {
+      ...parkedMesh,
+      type: 'civilian',
+      name: 'COASTAL SCOOTER',
+      isScooter: true,
+      radius: 0.95,
+      laneX: -10.4,
+      baseSpeed: 0,
+      speed: 0,
+      heading: Math.PI - 0.15,
+      damagePct: 0,
+      maxSpeed: 34,
+      parked: true,
+    };
+    this.vehicles.push(this.parkedScooter);
 
     // Overhead CBPD Helicopter (EAGLE-2)
     this.heli = createPoliceHelicopter();
@@ -568,6 +622,17 @@ export class Gameplay {
     if (this.burningWreck) this.burningWreck.visible = false;
     if (this.windowShooter) this.windowShooter.shooter.group.visible = false;
 
+    // Position parked coastal scooter at the Marina Boulevard intersection curb
+    if (this.parkedScooter) {
+      this.parkedScooter.mesh.visible = true;
+      this.parkedScooter.mesh.position.set(-10.4, 0, -35.5);
+      this.parkedScooter.heading = Math.PI - 0.12;
+      this.parkedScooter.mesh.rotation.y = this.parkedScooter.heading;
+      this.parkedScooter.speed = 0;
+      this.parkedScooter.parked = true;
+      if (this.parkedScooter.riderGroup) this.parkedScooter.riderGroup.visible = false;
+    }
+
     if (isNew) {
       this.cash = 5200;
       this.rank = 1;
@@ -576,17 +641,93 @@ export class Gameplay {
       this.rpNext = 1200;
       this.missionIdx = 0;
       this.stageIdx = 0;
-      this.wantedStars = 2;
-      this.alertText = 'UNITS CLOSING IN';
+      this.wantedStars = 0;
+      this.alertText = 'ALL CLEAR';
       this.health = 100;
       this.armour = 100;
+
+      // Spawn on foot at Marina Boulevard intersection sidewalk (-12.2, 0.16, -32.0)
+      this.inVehicle = false;
+      this.currentVehicle = null;
+      this.playerChar.mesh.visible = true;
+      this.playerChar.mesh.position.set(-12.2, 0.16, -32.0);
+      this.playerChar.mesh.rotation.y = Math.PI - 0.55;
+      this.playerChar.setPose('idle', this.time);
+
+      // Parked CORSAIR V12 right beside the curb
+      this.heroVehicle.mesh.position.set(-8.6, 0, -27.5);
+      this.heroVehicle.heading = Math.PI;
+      this.heroVehicle.mesh.rotation.y = Math.PI;
+      this.heroVehicle.speed = 0;
+      this.heroVehicle.damagePct = 0;
+
+      this.camYaw = Math.PI - 0.55;
+      this.camPitch = 0.22;
+      this.camDist = 8.4;
+      this.camIdleTimer = 0;
+
+      // Arrange 6 civilian cars & scooters actively passing right in front of the player
+      const livelySlots = [
+        { x: -4.0, z: -52, h: 0, spd: 12 },
+        { x: 4.0, z: -20, h: Math.PI, spd: 13 },
+        { x: 8.2, z: -36, h: Math.PI, spd: 12 },
+        { x: -8.2, z: -66, h: 0, spd: 13 },
+        { x: 4.0, z: -48, h: Math.PI, spd: 12 },
+        { x: -4.0, z: -24, h: 0, spd: 11 },
+      ];
+      const activePool = [
+        ...this.civilianVehicles.filter((c) => c.isScooter).slice(0, 2),
+        ...this.civilianVehicles.filter((c) => !c.isScooter).slice(0, 4),
+      ];
+      activePool.forEach((v, i) => {
+        const slot = livelySlots[i];
+        if (!v || !slot) return;
+        v.mesh.position.set(slot.x, 0, slot.z);
+        v.laneX = slot.x;
+        v.heading = slot.h;
+        v.mesh.rotation.y = slot.h;
+        v.speed = slot.spd;
+        v.parked = false;
+      });
+    } else {
+      this.inVehicle = true;
+      this.currentVehicle = this.heroVehicle;
+      this.playerChar.mesh.visible = false;
+      this.heroVehicle.mesh.position.set(2.4, 0, -20);
+      this.heroVehicle.heading = Math.PI;
+      this.heroVehicle.mesh.rotation.y = Math.PI;
+      this.heroVehicle.speed = 20;
+
+      this.camYaw = Math.PI;
+      this.camPitch = 0.24;
+      this.camDist = 9.2;
+      this.camIdleTimer = 0;
+
+      // Arrange active civilian cars & scooters ahead of the player on Marina Boulevard
+      const aheadSlots = [
+        { x: -8.2, z: -46, h: 0, spd: 12 },
+        { x: -4.0, z: -64, h: 0, spd: 13 },
+        { x: 4.0, z: -52, h: Math.PI, spd: 13 },
+        { x: 8.2, z: -38, h: Math.PI, spd: 12 },
+        { x: 8.2, z: -72, h: Math.PI, spd: 12 },
+        { x: -4.0, z: -92, h: 0, spd: 11 },
+      ];
+      const activePool = [
+        ...this.civilianVehicles.filter((c) => c.isScooter).slice(0, 2),
+        ...this.civilianVehicles.filter((c) => !c.isScooter).slice(0, 4),
+      ];
+      activePool.forEach((v, i) => {
+        const slot = aheadSlots[i];
+        if (!v || !slot) return;
+        v.mesh.position.set(slot.x, 0, slot.z);
+        v.laneX = slot.x;
+        v.heading = slot.h;
+        v.mesh.rotation.y = slot.h;
+        v.speed = slot.spd;
+        v.parked = false;
+      });
     }
-    this.inVehicle = true;
-    this.currentVehicle = this.heroVehicle;
-    this.playerChar.mesh.visible = false;
-    this.heroVehicle.mesh.position.set(2.4, 0, -20);
-    this.heroVehicle.heading = Math.PI;
-    this.heroVehicle.speed = 20;
+
     this.camera.fov = 58;
     this.camera.updateProjectionMatrix();
     this.sound.unlock();
@@ -596,6 +737,7 @@ export class Gameplay {
   applyShot(shot) {
     this.shotMode = shot;
     this.vfx.clear();
+    if (this.parkedScooter) this.parkedScooter.mesh.visible = false;
 
     if (shot === 'cover') {
       this.mode = 'play';
@@ -884,11 +1026,18 @@ export class Gameplay {
     if (this.mode !== 'play') return;
     if (this.inVehicle && this.currentVehicle) {
       const v = this.currentVehicle;
+      if (v.isScooter && v.riderGroup) v.riderGroup.visible = false;
+      if (v.type === 'civilian') {
+        v.parked = true;
+        v.speed = 0;
+      }
       this.inVehicle = false;
+      this.currentVehicle = null;
       this.playerChar.mesh.visible = true;
-      const sideX = Math.cos(v.heading) * 2.1;
-      const sideZ = -Math.sin(v.heading) * 2.1;
-      this.playerChar.mesh.position.set(v.mesh.position.x - sideX, 0, v.mesh.position.z - sideZ);
+      const sideDist = v.isScooter ? 1.35 : 2.1;
+      const sideX = Math.cos(v.heading) * sideDist;
+      const sideZ = -Math.sin(v.heading) * sideDist;
+      this.playerChar.mesh.position.set(v.mesh.position.x - sideX, 0.16, v.mesh.position.z - sideZ);
       this.playerChar.mesh.rotation.y = v.heading;
       this.playerChar.setPose('idle', this.time);
       this.sound.playClick();
@@ -897,6 +1046,7 @@ export class Gameplay {
       let best = null;
       let bestDist = 5.5;
       for (const v of this.vehicles) {
+        if (!v.mesh.visible) continue;
         const d = p.distanceTo(v.mesh.position);
         if (d < bestDist) {
           bestDist = d;
@@ -905,7 +1055,10 @@ export class Gameplay {
       }
       if (best) {
         this.currentVehicle = best;
+        best.parked = false;
+        if (best.isScooter && best.riderGroup) best.riderGroup.visible = true;
         this.inVehicle = true;
+        this.nearbyVehicle = null;
         this.playerChar.mesh.visible = false;
         this.career.vehiclesBoosted += 1;
         this.sound.playClick();
@@ -1053,8 +1206,14 @@ export class Gameplay {
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.nitroTimer = Math.max(0, this.nitroTimer - dt);
+    this.impactSfxCd = Math.max(0, this.impactSfxCd - dt);
+    this.camIdleTimer += dt;
+
+    const drivingHero = this.inVehicle && this.currentVehicle === this.heroVehicle;
+    const shiftNitro = drivingHero && this.input.shift && (this.input.w || Math.abs(this.heroVehicle.speed) > 4);
+    const boosting = drivingHero && (this.nitroTimer > 0 || shiftNitro);
+
     if (this.heroVehicle && this.heroVehicle.nitroGroup) {
-      const boosting = this.inVehicle && this.currentVehicle === this.heroVehicle && (this.nitroTimer > 0 || (this.input.shift && Math.abs(this.heroVehicle.speed) > 22));
       this.heroVehicle.nitroGroup.visible = boosting;
       if (boosting) {
         const flicker = 0.85 + Math.sin(this.time * 48) * 0.22;
@@ -1070,26 +1229,29 @@ export class Gameplay {
     }
 
     if (this.inVehicle && this.currentVehicle) {
+      this.nearbyVehicle = null;
       const v = this.currentVehicle;
-      const accel = this.input.w ? 28 : this.input.s ? -22 : 0;
+      const baseAccel = this.input.w ? 28 : this.input.s ? -22 : 0;
+      const accel = baseAccel + (boosting ? 14 : 0);
       v.speed += accel * dt;
-      if (accel === 0) v.speed *= Math.pow(0.28, dt);
+      if (baseAccel === 0 && !boosting) v.speed *= Math.pow(0.28, dt);
       if (this.input.space) {
         v.speed *= Math.pow(0.18, dt);
         if (Math.abs(v.speed) > 8 && Math.random() < 0.45) {
           this.vfx.spawnSmoke(v.mesh.position.clone().add(new THREE.Vector3(0, 0.25, 0)), 1.0, 0.7);
         }
       }
-      v.speed = Math.max(-14, Math.min(v.maxSpeed, v.speed));
+      const topSpeed = boosting ? Math.max(56, v.maxSpeed) : v.maxSpeed;
+      v.speed = Math.max(-14, Math.min(topSpeed, v.speed));
 
-      const steerDir = (this.input.a ? 1 : 0) - (this.input.d ? 1 : 0);
+      const steerDir = ((this.input.a || this.input.arrowLeft) ? 1 : 0) - ((this.input.d || this.input.arrowRight) ? 1 : 0);
       if (Math.abs(v.speed) > 0.6) {
-        v.heading += steerDir * 2.1 * dt * Math.sign(v.speed);
+        v.heading += steerDir * (v.isScooter ? 2.5 : 2.1) * dt * Math.sign(v.speed);
       }
 
       const nx = v.mesh.position.x + Math.sin(v.heading) * v.speed * dt;
       const nz = v.mesh.position.z + Math.cos(v.heading) * v.speed * dt;
-      if (!this._collidesBuilding(nx, nz, 1.8)) {
+      if (!this._collidesBuilding(nx, nz, v.radius || 1.8)) {
         v.mesh.position.x = Math.max(-135, Math.min(32, nx));
         v.mesh.position.z = Math.max(-230, Math.min(230, nz));
       } else {
@@ -1101,22 +1263,66 @@ export class Gameplay {
       v.mesh.rotation.y = v.heading;
       v.wheels.forEach((w) => { w.rotation.x += v.speed * dt * 2.2; });
 
+      // Dark hood smoke when driven vehicle damagePct > 55
+      if (v.damagePct > 55 && Math.random() < dt * 8.5) {
+        const hoodDist = v.isScooter ? 0.55 : 1.45;
+        const hoodPos = v.mesh.position.clone().add(
+          new THREE.Vector3(Math.sin(v.heading) * hoodDist, 0.92, Math.cos(v.heading) * hoodDist)
+        );
+        this.vfx.spawnSmoke(hoodPos, 1.15, 1.05, 0x334155);
+      }
+
       const kmh = Math.round(Math.abs(v.speed) * 3.6);
       if (kmh > this.career.topSpeedKmh) this.career.topSpeedKmh = kmh;
 
-      const camBack = 9.4;
+      // Dynamic FOV widening during SHIFT nitro boost (58 -> 64)
+      const targetFov = boosting ? 64 : 58;
+      if (Math.abs(this.camera.fov - targetFov) > 0.02) {
+        this.camera.fov += (targetFov - this.camera.fov) * (1 - Math.exp(-6.0 * dt));
+        this.camera.updateProjectionMatrix();
+      }
+
+      // Gently re-center behind car only after 2.6s of idle mouse while moving
+      if (this.camIdleTimer > 2.6 && Math.abs(v.speed) > 2.2) {
+        let yawDiff = v.heading - this.camYaw;
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        this.camYaw += yawDiff * (1 - Math.exp(-2.8 * dt));
+      }
+
+      // Spherical 360° orbit camera around vehicle
+      const horiz = Math.cos(this.camPitch) * this.camDist;
+      const vert = Math.sin(this.camPitch) * this.camDist;
       const targetCam = new THREE.Vector3(
-        v.mesh.position.x - Math.sin(v.heading) * camBack,
-        3.6,
-        v.mesh.position.z - Math.cos(v.heading) * camBack
+        v.mesh.position.x - Math.sin(this.camYaw) * horiz,
+        Math.max(1.0, 1.6 + vert),
+        v.mesh.position.z - Math.cos(this.camYaw) * horiz
       );
-      this.camera.position.lerp(targetCam, 1 - Math.exp(-6.5 * dt));
+      this.camera.position.lerp(targetCam, 1 - Math.exp(-9.5 * dt));
       this.camera.lookAt(v.mesh.position.x, 1.4, v.mesh.position.z);
     } else {
+      // On-foot ArrowLeft/ArrowRight camera yaw turn
+      if (this.input.arrowLeft) {
+        this.camYaw += 2.2 * dt;
+        this.camIdleTimer = 0;
+      }
+      if (this.input.arrowRight) {
+        this.camYaw -= 2.2 * dt;
+        this.camIdleTimer = 0;
+      }
+
+      // Camera-relative WASD movement
       const speed = this.input.shift ? 8.8 : 5.4;
-      let mx = (this.input.d ? 1 : 0) - (this.input.a ? 1 : 0);
-      let mz = (this.input.s ? 1 : 0) - (this.input.w ? 1 : 0);
-      const moving = mx !== 0 || mz !== 0;
+      const fwdIn = (this.input.w ? 1 : 0) - (this.input.s ? 1 : 0);
+      const rightIn = (this.input.d ? 1 : 0) - (this.input.a ? 1 : 0);
+      const fwdX = Math.sin(this.camYaw);
+      const fwdZ = Math.cos(this.camYaw);
+      const rightX = -Math.cos(this.camYaw);
+      const rightZ = Math.sin(this.camYaw);
+      let mx = fwdX * fwdIn + rightX * rightIn;
+      let mz = fwdZ * fwdIn + rightZ * rightIn;
+
+      const moving = Math.hypot(mx, mz) > 0.01;
       if (moving) {
         const len = Math.hypot(mx, mz);
         mx /= len;
@@ -1124,8 +1330,8 @@ export class Gameplay {
         const nx = this.playerChar.mesh.position.x + mx * speed * dt;
         const nz = this.playerChar.mesh.position.z + mz * speed * dt;
         if (!this._collidesBuilding(nx, nz, 0.6)) {
-          this.playerChar.mesh.position.x = nx;
-          this.playerChar.mesh.position.z = nz;
+          this.playerChar.mesh.position.x = Math.max(-135, Math.min(32, nx));
+          this.playerChar.mesh.position.z = Math.max(-230, Math.min(230, nz));
         }
         this.playerChar.mesh.rotation.y = Math.atan2(mx, mz);
         this.playerChar.setPose(this.input.ctrl ? 'crouch' : 'run', this.time);
@@ -1137,13 +1343,41 @@ export class Gameplay {
         this.fireWeapon();
       }
 
+      // Smoothly return FOV to 58 on foot
+      if (Math.abs(this.camera.fov - 58) > 0.02) {
+        this.camera.fov += (58 - this.camera.fov) * (1 - Math.exp(-6.0 * dt));
+        this.camera.updateProjectionMatrix();
+      }
+
       const p = this.playerChar.mesh.position;
-      const targetCam = new THREE.Vector3(p.x + 5.5, 4.2, p.z + 6.5);
-      this.camera.position.lerp(targetCam, 1 - Math.exp(-6.5 * dt));
-      this.camera.lookAt(p.x, 1.35, p.z);
+
+      // Track closest hijackable vehicle for smart HUD prompt
+      this.nearbyVehicle = null;
+      let bestDist = 5.5;
+      for (const v of this.vehicles) {
+        if (!v.mesh.visible) continue;
+        const d = p.distanceTo(v.mesh.position);
+        if (d < bestDist) {
+          bestDist = d;
+          this.nearbyVehicle = v;
+        }
+      }
+
+      // Spherical 360° orbit camera around on-foot player
+      const footDist = Math.max(4.5, Math.min(11.5, this.camDist * 0.72));
+      const horiz = Math.cos(this.camPitch) * footDist;
+      const vert = Math.sin(this.camPitch) * footDist;
+      const targetCam = new THREE.Vector3(
+        p.x - Math.sin(this.camYaw) * horiz,
+        Math.max(1.05, p.y + 1.55 + vert),
+        p.z - Math.cos(this.camYaw) * horiz
+      );
+      this.camera.position.lerp(targetCam, 1 - Math.exp(-10.0 * dt));
+      this.camera.lookAt(p.x, p.y + 1.35, p.z);
     }
 
     const pPos = this.getPlayerPos();
+    const pDirZ = Math.cos(this.getPlayerHeading()) < 0 ? -1 : 1;
 
     // Interactive World Locations proximity detection (Marina Garage & Bazaar Arms Dealer)
     this.nearbyLocation = null;
@@ -1154,7 +1388,7 @@ export class Gameplay {
       }
     }
 
-    // Real 1–5 Star Wanted Escalation + Reactive Civilian Traffic Braking
+    // Real 1–5 Star Wanted Escalation + Reactive Civilian Traffic Braking + 125m Proximity Recycler
     let policeIdx = 0;
     for (const v of this.vehicles) {
       if (v === this.currentVehicle) continue;
@@ -1204,27 +1438,88 @@ export class Gameplay {
         v.wheels.forEach((w) => { w.rotation.x += v.speed * dt * 2.2; });
         v.tactic = this.wantedStars === 1 ? 'PATROL' : dist < 14 ? 'RAMMING' : 'PINCHING';
       } else if (v.type === 'civilian') {
+        if (v.parked || !v.mesh.visible) continue;
+
+        // 125m proximity recycler: respawn distant civilian traffic ahead of player
+        if (Math.hypot(v.mesh.position.x - pPos.x, v.mesh.position.z - pPos.z) > 125) {
+          const recycledZ = Math.max(-210, Math.min(210, pPos.z + pDirZ * (55 + Math.random() * 55)));
+          v.mesh.position.set(v.laneX ?? v.mesh.position.x, 0, recycledZ);
+          v.speed = v.baseSpeed || 12;
+        }
+
         // Reactive AI: check ahead in lane for any blocking vehicle and brake smoothly
         const fwdX = Math.sin(v.heading);
         const fwdZ = Math.cos(v.heading);
         let blocked = false;
         for (const other of this.vehicles) {
-          if (other === v) continue;
+          if (other === v || !other.mesh.visible) continue;
           const ox = other.mesh.position.x - v.mesh.position.x;
           const oz = other.mesh.position.z - v.mesh.position.z;
           const forwardDist = ox * fwdX + oz * fwdZ;
           const lateralDist = Math.abs(ox * fwdZ - oz * fwdX);
-          if (forwardDist > 1.5 && forwardDist < 13.5 && lateralDist < 2.8) {
+          if (forwardDist > 1.5 && forwardDist < 13.5 && lateralDist < 2.6) {
             blocked = true;
             break;
           }
         }
-        const desiredSpd = blocked ? 0 : 11;
+        const desiredSpd = blocked ? 0 : (v.baseSpeed || 12);
         v.speed += (desiredSpd - v.speed) * Math.min(1, dt * (blocked ? 7.5 : 2.2));
         v.mesh.position.z += Math.cos(v.heading) * v.speed * dt;
         v.wheels.forEach((w) => { w.rotation.x += v.speed * dt * 2.2; });
-        if (v.mesh.position.z < -200) v.mesh.position.z = 200;
-        if (v.mesh.position.z > 200) v.mesh.position.z = -200;
+        if (v.mesh.position.z < -215) v.mesh.position.z = 215;
+        if (v.mesh.position.z > 215) v.mesh.position.z = -215;
+      }
+    }
+
+    // Tactile Vehicle-to-Vehicle Collisions: elastic separation, velocity transfer, sparks & impact SFX
+    for (let i = 0; i < this.vehicles.length; i++) {
+      const a = this.vehicles[i];
+      if (!a.mesh.visible) continue;
+      for (let j = i + 1; j < this.vehicles.length; j++) {
+        const b = this.vehicles[j];
+        if (!b.mesh.visible) continue;
+        const dx = b.mesh.position.x - a.mesh.position.x;
+        const dz = b.mesh.position.z - a.mesh.position.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = (a.radius || 1.75) + (b.radius || 1.75);
+        if (dist > 0.001 && dist < minDist) {
+          const nx = dx / dist;
+          const nz = dz / dist;
+          const overlap = (minDist - dist) * 0.52;
+          a.mesh.position.x -= nx * overlap;
+          a.mesh.position.z -= nz * overlap;
+          b.mesh.position.x += nx * overlap;
+          b.mesh.position.z += nz * overlap;
+
+          const avx = Math.sin(a.heading) * a.speed;
+          const avz = Math.cos(a.heading) * a.speed;
+          const bvx = Math.sin(b.heading) * b.speed;
+          const bvz = Math.cos(b.heading) * b.speed;
+          const relNormal = (avx - bvx) * nx + (avz - bvz) * nz;
+
+          if (relNormal > 0) {
+            const impulse = relNormal * 0.58;
+            a.speed = Math.max(-14, Math.min(a.maxSpeed, a.speed - impulse * 0.65));
+            b.speed = Math.max(-14, Math.min(b.maxSpeed, b.speed + impulse * 0.65));
+
+            const involvesPlayer = a === this.currentVehicle || b === this.currentVehicle;
+            if (relNormal > 4.5 || involvesPlayer) {
+              const mid = new THREE.Vector3(
+                (a.mesh.position.x + b.mesh.position.x) * 0.5,
+                0.78,
+                (a.mesh.position.z + b.mesh.position.z) * 0.5
+              );
+              this.vfx.spawnSparks(mid, relNormal > 12 ? 12 : 7);
+              const dmg = Math.min(12, Math.max(2, Math.round(relNormal * 0.45)));
+              a.damagePct = Math.min(95, (a.damagePct || 0) + dmg);
+              b.damagePct = Math.min(95, (b.damagePct || 0) + dmg);
+              if (this.impactSfxCd <= 0) {
+                this.sound.playImpact(relNormal > 12);
+                this.impactSfxCd = 0.16;
+              }
+            }
+          }
+        }
       }
     }
 
@@ -1274,12 +1569,23 @@ export class Gameplay {
       }
     }
 
-    // Reactive Pedestrian AI: flee in panic from nearby gunshots or high-speed pursuits
+    // Reactive Pedestrian AI + 115m Proximity Recycler: flee in panic from gunshots or pursuits
     const recentGunshot = this.lastGunshotPos && (this.time - this.lastGunshotTime) < 6.0;
     const chaseSpeed = this.inVehicle && this.currentVehicle ? Math.abs(this.currentVehicle.speed) : 0;
     for (const ped of this.world.sidewalkPeds) {
-      const px = ped.char.mesh.position.x;
-      const pz = ped.char.mesh.position.z;
+      let px = ped.char.mesh.position.x;
+      let pz = ped.char.mesh.position.z;
+
+      // 115m proximity recycler: keep both sidewalks lively around the player
+      if (Math.hypot(px - pPos.x, pz - pPos.z) > 115) {
+        const recycledZ = Math.max(-200, Math.min(200, pPos.z + pDirZ * (45 + Math.random() * 55)));
+        ped.char.mesh.position.z = recycledZ;
+        ped.homeZ = recycledZ;
+        ped.panicTimer = 0;
+        ped.panicked = false;
+        pz = recycledZ;
+      }
+
       let threatX = null;
       let threatZ = null;
       if (recentGunshot && Math.hypot(px - this.lastGunshotPos.x, pz - this.lastGunshotPos.z) < 28) {
@@ -1297,7 +1603,9 @@ export class Gameplay {
       if (ped.panicTimer > 0) {
         ped.panicTimer -= dt;
         const fleeSpd = 5.4 * dt;
-        ped.char.mesh.position.x = Math.max(-16.2, Math.min(-12.6, px + Math.sin(ped.fleeAngle) * fleeSpd));
+        const minX = ped.side === 'east' ? 12.4 : -16.2;
+        const maxX = ped.side === 'east' ? 15.8 : -12.6;
+        ped.char.mesh.position.x = Math.max(minX, Math.min(maxX, px + Math.sin(ped.fleeAngle) * fleeSpd));
         ped.char.mesh.position.z += Math.cos(ped.fleeAngle) * fleeSpd;
         ped.char.mesh.rotation.y = ped.fleeAngle;
         ped.char.setPose('run', this.time + ped.phase);

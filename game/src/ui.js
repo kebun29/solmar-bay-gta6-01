@@ -224,8 +224,19 @@ export class UIController {
     document.getElementById('hud-standing-text').textContent = `${dist.status} · ${dist.standing}`;
     document.getElementById('hud-standing-fill').style.width = `${dist.standing}%`;
     const tipEl = document.getElementById('hud-context-tip');
-    tipEl.classList.toggle('hidden', g.inVehicle);
-    tipEl.textContent = 'USE STALLS FOR HARD COVER';
+    if (g.shotMode) {
+      tipEl.classList.toggle('hidden', g.inVehicle);
+      tipEl.textContent = 'USE STALLS FOR HARD COVER';
+    } else {
+      tipEl.classList.remove('hidden');
+      if (!g.inVehicle) {
+        tipEl.textContent = g.nearbyVehicle
+          ? `PRESS [F] TO HIJACK ${g.nearbyVehicle.name}`
+          : 'DRAG MOUSE 360° · WASD MOVE';
+      } else {
+        tipEl.textContent = 'DRAG MOUSE 360° · [SHIFT] NITRO · [F] EXIT';
+      }
+    }
 
     document.getElementById('hud-hp-fill').style.width = `${Math.max(0, Math.min(100, g.health))}%`;
     document.getElementById('hud-hp-val').textContent = Math.round(g.health);

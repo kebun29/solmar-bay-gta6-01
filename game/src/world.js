@@ -427,6 +427,8 @@ export class World {
     this.sidewalkPeds = [];
     this.steamPuffs = [];
     this.interactiveMarkers = [];
+    this.trafficSignals = [];
+    this.missionBeacon = null;
     this.sunsetEnvMap = null;
     this.nightEnvMap = null;
 
@@ -441,8 +443,10 @@ export class World {
     this._buildNightMarket();
     this._buildBeachAndPalms();
     this._buildStreetlights();
+    this._buildTrafficSignalsAndCrosswalks();
     this._buildYachtsAndPeds();
     this._buildInteractiveLocations();
+    this._buildMissionBeacon();
   }
 
   _buildLighting() {
@@ -1661,6 +1665,77 @@ export class World {
     }
   }
 
+  _buildTrafficSignalsAndCrosswalks() {
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.72, roughness: 0.34 });
+    const housingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.45, roughness: 0.45 });
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.72 });
+
+    const intersections = [-110, -35, 45, 125];
+    intersections.forEach((iz, idx) => {
+      // Crisp crosswalk stripes across Marina Boulevard on north & south sides of each intersection
+      [-7.6, 7.6].forEach((zOff) => {
+        for (let sx = -9.6; sx <= 9.6; sx += 2.4) {
+          const stripe = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 2.8), stripeMat);
+          stripe.rotation.x = -Math.PI / 2;
+          stripe.position.set(sx, 0.022, iz + zOff);
+          stripe.receiveShadow = true;
+          this.scene.add(stripe);
+        }
+      });
+
+      // Cantilevered 3-light traffic signal poles (keep east heli spotlight zone z=-52..-22 pole-free)
+      const sides = iz === -35 ? [-12.4] : [-12.4, 12.4];
+      sides.forEach((px, sIdx) => {
+        const g = new THREE.Group();
+        const pz = iz + (px < 0 ? -7.2 : 7.2);
+        g.position.set(px, 0, pz);
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.8, 8), poleMat);
+        pole.position.y = 3.4;
+        pole.castShadow = true;
+        g.add(pole);
+
+        const armDir = px > 0 ? -1 : 1;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.16, 0.16), poleMat);
+        arm.position.set(armDir * 2.75, 6.55, 0);
+        g.add(arm);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.18, 0.36), housingMat);
+        head.position.set(armDir * 4.5, 6.1, 0);
+        g.add(head);
+
+        const redMat = new THREE.MeshBasicMaterial({ color: 0xff2a3c });
+        const amberMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+        const greenMat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+
+        const bulbGeo = new THREE.SphereGeometry(0.11, 8, 8);
+        const redBulb = new THREE.Mesh(bulbGeo, redMat);
+        redBulb.position.set(armDir * 4.5, 6.42, armDir * 0.16);
+        const amberBulb = new THREE.Mesh(bulbGeo, amberMat);
+        amberBulb.position.set(armDir * 4.5, 6.1, armDir * 0.16);
+        const greenBulb = new THREE.Mesh(bulbGeo, greenMat);
+        greenBulb.position.set(armDir * 4.5, 5.78, armDir * 0.16);
+        g.add(redBulb, amberBulb, greenBulb);
+
+        const redGlow = createGlowSprite(0xff2a3c, 1.45, 0.15);
+        redGlow.position.copy(redBulb.position);
+        const amberGlow = createGlowSprite(0xfbbf24, 1.45, 0.15);
+        amberGlow.position.copy(amberBulb.position);
+        const greenGlow = createGlowSprite(0x22c55e, 1.55, 0.85);
+        greenGlow.position.copy(greenBulb.position);
+        g.add(redGlow, amberGlow, greenGlow);
+
+        this.scene.add(g);
+        this.trafficSignals.push({
+          redGlow,
+          amberGlow,
+          greenGlow,
+          phase: (idx * 2.5 + sIdx * 1.2) % 12,
+        });
+      });
+    });
+  }
+
   _buildYachtsAndPeds() {
     // Luxury yachts cruising & moored in Coralina Bay
     const yachtSpecs = [
@@ -1678,8 +1753,9 @@ export class World {
       this.yachts.push({ mesh: y, baseY: -0.1, phase: i * 1.3 });
     });
 
-    // Sidewalk pedestrians strolling along the Art-Deco shopfront strip (left of Marina Blvd)
+    // 22 Sidewalk pedestrians strolling along BOTH west Art-Deco strip (x ~ -14.2) & east beach promenade (x ~ 14.0)
     const pedSpecs = [
+      // West Art-Deco sidewalk (12 pedestrians)
       { x: -14.6, z: -58, ry: 0.2 },
       { x: -13.9, z: -42, ry: Math.PI - 0.3 },
       { x: -14.8, z: -29, ry: 1.3 },
@@ -1687,6 +1763,22 @@ export class World {
       { x: -14.5, z: -7, ry: Math.PI + 0.2 },
       { x: -13.8, z: 9, ry: 0.4 },
       { x: -14.6, z: 24, ry: Math.PI },
+      { x: -14.2, z: -94, ry: 0.1 },
+      { x: -13.7, z: -76, ry: Math.PI - 0.15 },
+      { x: -14.4, z: 48, ry: 0.25 },
+      { x: -13.9, z: 74, ry: Math.PI + 0.1 },
+      { x: -14.5, z: 108, ry: 0.18 },
+      // East beach promenade (10 pedestrians)
+      { x: 14.1, z: -98, ry: Math.PI - 0.1 },
+      { x: 13.7, z: -74, ry: 0.12 },
+      { x: 14.4, z: -54, ry: Math.PI + 0.08 },
+      { x: 13.8, z: -31, ry: 0.2 },
+      { x: 14.3, z: -14, ry: Math.PI - 0.18 },
+      { x: 13.9, z: 6, ry: 0.15 },
+      { x: 14.5, z: 28, ry: Math.PI + 0.12 },
+      { x: 13.8, z: 54, ry: 0.1 },
+      { x: 14.2, z: 82, ry: Math.PI - 0.1 },
+      { x: 13.9, z: 112, ry: 0.22 },
     ];
     pedSpecs.forEach((ps, i) => {
       const p = createCharacter('ped', i);
@@ -1698,6 +1790,7 @@ export class World {
         char: p,
         homeX: ps.x,
         homeZ: ps.z,
+        side: ps.x < 0 ? 'west' : 'east',
         baseRy: ps.ry,
         phase: i * 1.1,
         panicked: false,
@@ -1705,6 +1798,67 @@ export class World {
         fleeAngle: ps.ry,
       });
     });
+  }
+
+  _buildMissionBeacon() {
+    const g = new THREE.Group();
+    g.visible = false;
+
+    const goldCol = 0xfbbf24;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.15, 2.05, 52, 20, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: goldCol,
+        transparent: true,
+        opacity: 0.2,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    beam.position.y = 26;
+    g.add(beam);
+
+    const core = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.55, 52, 12, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff3c4,
+        transparent: true,
+        opacity: 0.32,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    core.position.y = 26;
+    g.add(core);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(2.1, 2.85, 32),
+      new THREE.MeshBasicMaterial({
+        color: goldCol,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.06;
+    g.add(ring);
+
+    const diamond = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.95, 0),
+      new THREE.MeshBasicMaterial({ color: 0xfde047, wireframe: true })
+    );
+    diamond.position.y = 4.2;
+    g.add(diamond);
+
+    const glow = createGlowSprite(0xfbbf24, 6.2, 0.72);
+    glow.position.y = 3.2;
+    g.add(glow);
+
+    this.scene.add(g);
+    this.missionBeacon = { group: g, beam, core, ring, diamond, glow };
   }
 
   _buildInteractiveLocations() {
@@ -1775,7 +1929,7 @@ export class World {
     });
   }
 
-  update(time) {
+  update(time, missionTarget = null) {
     for (const p of this.palms) {
       p.crown.rotation.z = Math.sin(time * 1.4 + p.phase) * 0.045;
     }
@@ -1802,6 +1956,25 @@ export class World {
       m.icon.position.y = 2.15 + Math.sin(time * 2.6) * 0.25;
       const pulse = 0.94 + Math.sin(time * 3.0) * 0.08;
       m.ring.scale.set(pulse, pulse, 1);
+    }
+    for (const sig of this.trafficSignals) {
+      const t = (time + sig.phase) % 12;
+      sig.greenGlow.material.opacity = t < 6.5 ? 0.92 : 0.12;
+      sig.amberGlow.material.opacity = t >= 6.5 && t < 8.2 ? 0.92 : 0.12;
+      sig.redGlow.material.opacity = t >= 8.2 ? 0.92 : 0.12;
+    }
+    if (this.missionBeacon) {
+      if (missionTarget && typeof missionTarget.x === 'number' && typeof missionTarget.z === 'number') {
+        this.missionBeacon.group.visible = true;
+        this.missionBeacon.group.position.set(missionTarget.x, 0.08, missionTarget.z);
+        const pulse = 0.92 + Math.sin(time * 3.4) * 0.1;
+        this.missionBeacon.ring.scale.set(pulse, pulse, 1);
+        this.missionBeacon.diamond.rotation.y = time * 2.2;
+        this.missionBeacon.diamond.position.y = 4.2 + Math.sin(time * 2.8) * 0.45;
+        this.missionBeacon.beam.material.opacity = 0.18 + Math.sin(time * 3.0) * 0.05;
+      } else {
+        this.missionBeacon.group.visible = false;
+      }
     }
   }
 }

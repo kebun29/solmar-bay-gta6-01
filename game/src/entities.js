@@ -655,6 +655,216 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
   return { mesh: root, wheels, redGlow, blueGlow, paintMat, nitroGroup };
 }
 
+// Coastal Scooter / Motorcycle with spinning wheels, shield apron, handlebars, lights & seated rider
+export function createScooterMesh(bodyColor = 0x22d3ee, withRider = true, riderIdx = 0) {
+  const root = new THREE.Group();
+
+  const paintMat = new THREE.MeshStandardMaterial({
+    color: bodyColor,
+    metalness: 0.58,
+    roughness: 0.22,
+    envMapIntensity: 1.45,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    metalness: 0.42,
+    roughness: 0.45,
+  });
+  const chromeMat = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    metalness: 0.94,
+    roughness: 0.14,
+  });
+  const seatMat = new THREE.MeshStandardMaterial({
+    color: 0x292524,
+    roughness: 0.78,
+  });
+
+  root.add(createContactShadow(1.25, 2.55, 0.72));
+
+  // Front & rear spinning wheels
+  const wheels = [];
+  const frontWheel = createWheel(0.31, 0.16, false);
+  frontWheel.position.set(0, 0.31, 0.86);
+  root.add(frontWheel);
+  wheels.push(frontWheel);
+
+  const rearWheel = createWheel(0.31, 0.18, false);
+  rearWheel.position.set(0, 0.31, -0.8);
+  root.add(rearWheel);
+  wheels.push(rearWheel);
+
+  // Lower step-through floorboard & chassis
+  const floorboard = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 1.1), darkMat);
+  floorboard.position.set(0, 0.32, 0.04);
+  floorboard.castShadow = true;
+  root.add(floorboard);
+
+  // Rear sculpted body cowl
+  const rearBody = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.44, 0.95), paintMat);
+  rearBody.position.set(0, 0.62, -0.52);
+  rearBody.castShadow = true;
+  root.add(rearBody);
+
+  // Leather saddle seat
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.78), seatMat);
+  seat.position.set(0, 0.88, -0.44);
+  seat.castShadow = true;
+  root.add(seat);
+
+  // Front shield apron (curved coastal Vespa/sport-scooter style)
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.76, 0.22), paintMat);
+  apron.position.set(0, 0.76, 0.62);
+  apron.rotation.x = -0.22;
+  apron.castShadow = true;
+  root.add(apron);
+
+  // Front fender & steering fork
+  const fender = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.44), paintMat);
+  fender.position.set(0, 0.56, 0.88);
+  fender.rotation.x = 0.24;
+  root.add(fender);
+
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.55, 8), chromeMat);
+  stem.position.set(0, 1.02, 0.56);
+  stem.rotation.x = -0.2;
+  root.add(stem);
+
+  // Handlebars + grips + chrome mirrors
+  const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.76, 8), chromeMat);
+  handleBar.rotation.z = Math.PI / 2;
+  handleBar.position.set(0, 1.24, 0.5);
+  root.add(handleBar);
+
+  [-0.36, 0.36].forEach((gx) => {
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.14, 8), darkMat);
+    grip.rotation.z = Math.PI / 2;
+    grip.position.set(gx, 1.24, 0.5);
+    root.add(grip);
+
+    const mirrorStem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6), chromeMat);
+    mirrorStem.position.set(gx * 0.72, 1.33, 0.52);
+    mirrorStem.rotation.z = gx > 0 ? -0.25 : 0.25;
+    root.add(mirrorStem);
+
+    const mirrorHead = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.07, 0.03), chromeMat);
+    mirrorHead.position.set(gx * 0.82, 1.42, 0.52);
+    root.add(mirrorHead);
+  });
+
+  // Side exhaust pipe
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.62, 8), chromeMat);
+  exhaust.rotation.x = Math.PI / 2 + 0.12;
+  exhaust.position.set(0.3, 0.38, -0.72);
+  root.add(exhaust);
+
+  // Glowing headlight + bloom sprite
+  const headHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.14, 12), chromeMat);
+  headHousing.rotation.x = Math.PI / 2;
+  headHousing.position.set(0, 1.2, 0.62);
+  root.add(headHousing);
+
+  const headLens = new THREE.Mesh(
+    new THREE.CircleGeometry(0.095, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff7e0 })
+  );
+  headLens.position.set(0, 1.2, 0.7);
+  root.add(headLens);
+
+  const headGlow = createGlowSprite(0xfff1c9, 1.65, 0.82);
+  headGlow.position.set(0, 1.2, 0.78);
+  root.add(headGlow);
+
+  // Glowing taillight + bloom sprite
+  const tailLamp = new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 0.1, 0.08),
+    new THREE.MeshBasicMaterial({ color: 0xff2438 })
+  );
+  tailLamp.position.set(0, 0.74, -1.0);
+  root.add(tailLamp);
+
+  const tailGlow = createGlowSprite(0xff2438, 1.4, 0.78);
+  tailGlow.position.set(0, 0.74, -1.08);
+  root.add(tailGlow);
+
+  // Articulated seated rider character
+  let riderGroup = null;
+  if (withRider) {
+    riderGroup = new THREE.Group();
+    const jacketPalette = [0xf43f5e, 0x0ea5e9, 0xf59e0b, 0x10b981, 0xa855f7, 0xfb7185];
+    const helmetPalette = [0xf8fafc, 0x111827, 0xfacc15, 0x22d3ee, 0xf43f5e, 0xe2e8f0];
+    const jacketMat = new THREE.MeshStandardMaterial({
+      color: jacketPalette[riderIdx % jacketPalette.length],
+      roughness: 0.58,
+    });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xdba882, roughness: 0.55 });
+    const helmetMat = new THREE.MeshStandardMaterial({
+      color: helmetPalette[riderIdx % helmetPalette.length],
+      metalness: 0.35,
+      roughness: 0.22,
+    });
+    const visorMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      metalness: 0.9,
+      roughness: 0.08,
+    });
+
+    // Seated torso leaning slightly forward toward handlebars
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.34, 6, 10), jacketMat);
+    torso.position.set(0, 1.24, -0.32);
+    torso.rotation.x = 0.22;
+    torso.castShadow = true;
+    riderGroup.add(torso);
+
+    // Helmeted head with tinted visor
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.165, 14, 12), helmetMat);
+    helmet.position.set(0, 1.66, -0.22);
+    helmet.castShadow = true;
+    riderGroup.add(helmet);
+
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.09, 0.14), visorMat);
+    visor.position.set(0, 1.66, -0.1);
+    riderGroup.add(visor);
+
+    // Articulated arms reaching forward to grip the handlebars
+    [-1, 1].forEach((side) => {
+      const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.24, 6, 8), jacketMat);
+      upperArm.position.set(side * 0.22, 1.36, -0.14);
+      upperArm.rotation.set(1.05, 0, side * -0.15);
+      riderGroup.add(upperArm);
+
+      const foreArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.048, 0.24, 6, 8), jacketMat);
+      foreArm.position.set(side * 0.3, 1.27, 0.18);
+      foreArm.rotation.set(1.42, 0, side * -0.12);
+      riderGroup.add(foreArm);
+
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), skinMat);
+      hand.position.set(side * 0.34, 1.24, 0.46);
+      riderGroup.add(hand);
+
+      // Seated legs resting on scooter floorboard
+      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.072, 0.26, 6, 8), pantsMat);
+      thigh.position.set(side * 0.19, 0.92, -0.14);
+      thigh.rotation.set(1.22, 0, side * -0.12);
+      riderGroup.add(thigh);
+
+      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.058, 0.28, 6, 8), pantsMat);
+      shin.position.set(side * 0.22, 0.62, 0.08);
+      shin.rotation.set(0.15, 0, 0);
+      riderGroup.add(shin);
+
+      const boot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.2), darkMat);
+      boot.position.set(side * 0.22, 0.42, 0.16);
+      riderGroup.add(boot);
+    });
+
+    root.add(riderGroup);
+  }
+
+  return { mesh: root, wheels, redGlow: null, blueGlow: null, paintMat, nitroGroup: null, riderGroup };
+}
+
 // Attach a non-boxy CBPD tactical officer leaning out of a cruiser's side window firing a carbine
 export function createWindowShooter(side = 1) {
   const g = new THREE.Group();

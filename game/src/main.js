@@ -77,8 +77,10 @@ window.addEventListener('keydown', (e) => {
 
   if (k === 'w' || k === 'arrowup') gameplay.input.w = true;
   if (k === 's' || k === 'arrowdown') gameplay.input.s = true;
-  if (k === 'a' || k === 'arrowleft') gameplay.input.a = true;
-  if (k === 'd' || k === 'arrowright') gameplay.input.d = true;
+  if (k === 'a') gameplay.input.a = true;
+  if (k === 'd') gameplay.input.d = true;
+  if (k === 'arrowleft') gameplay.input.arrowLeft = true;
+  if (k === 'arrowright') gameplay.input.arrowRight = true;
   if (k === 'shift') gameplay.input.shift = true;
   if (k === 'control') gameplay.input.ctrl = true;
   if (k === ' ') gameplay.input.space = true;
@@ -95,23 +97,103 @@ window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'w' || k === 'arrowup') gameplay.input.w = false;
   if (k === 's' || k === 'arrowdown') gameplay.input.s = false;
-  if (k === 'a' || k === 'arrowleft') gameplay.input.a = false;
-  if (k === 'd' || k === 'arrowright') gameplay.input.d = false;
+  if (k === 'a') gameplay.input.a = false;
+  if (k === 'd') gameplay.input.d = false;
+  if (k === 'arrowleft') gameplay.input.arrowLeft = false;
+  if (k === 'arrowright') gameplay.input.arrowRight = false;
   if (k === 'shift') gameplay.input.shift = false;
   if (k === 'control') gameplay.input.ctrl = false;
   if (k === ' ') gameplay.input.space = false;
 });
 
+// Iframe-safe 360° Mouse Orbit (Click-and-Drag + Pointer Lock) & Wheel Zoom
+let isDragging = false;
+let dragMoved = 0;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let downButton = -1;
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+});
+
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) {
-    sound.unlock();
+  if (gameplay.mode !== 'play' || gameplay.activeShop || gameplay.shotMode) return;
+  sound.unlock();
+  isDragging = true;
+  dragMoved = 0;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  downButton = e.button;
+
+  if (e.button === 0 && document.pointerLockElement === canvas) {
     gameplay.input.mouseDown = true;
     gameplay.fireWeapon();
   }
 });
+
+window.addEventListener('mousemove', (e) => {
+  if (gameplay.mode !== 'play' || gameplay.activeShop || gameplay.shotMode) return;
+  if (document.pointerLockElement === canvas) {
+    gameplay.camYaw -= e.movementX * 0.0042;
+    gameplay.camPitch = Math.max(-0.08, Math.min(1.05, gameplay.camPitch + e.movementY * 0.0036));
+    gameplay.camIdleTimer = 0;
+    return;
+  }
+  if (isDragging) {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    dragMoved += Math.hypot(dx, dy);
+    if (dragMoved > 2) {
+      gameplay.camYaw -= dx * 0.0052;
+      gameplay.camPitch = Math.max(-0.08, Math.min(1.05, gameplay.camPitch + dy * 0.0042));
+      gameplay.camIdleTimer = 0;
+    }
+  }
+});
+
 window.addEventListener('mouseup', (e) => {
+  if (
+    isDragging &&
+    downButton === 0 &&
+    dragMoved <= 2 &&
+    gameplay.mode === 'play' &&
+    !gameplay.activeShop &&
+    !gameplay.shotMode
+  ) {
+    if (document.pointerLockElement !== canvas) {
+      try {
+        if (typeof canvas.requestPointerLock === 'function') {
+          const maybePromise = canvas.requestPointerLock();
+          if (maybePromise && typeof maybePromise.catch === 'function') {
+            maybePromise.catch(() => {});
+          }
+        }
+      } catch {
+        // Iframe-safe fallback: click-and-drag remains active
+      }
+    }
+    if (!gameplay.inVehicle) {
+      gameplay.fireWeapon();
+    }
+  }
+  isDragging = false;
+  downButton = -1;
   if (e.button === 0) gameplay.input.mouseDown = false;
 });
+
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (gameplay.mode !== 'play' || gameplay.activeShop || gameplay.shotMode) return;
+    e.preventDefault();
+    gameplay.camDist = Math.max(4.5, Math.min(14.5, gameplay.camDist + Math.sign(e.deltaY) * 0.75));
+    gameplay.camIdleTimer = 0;
+  },
+  { passive: false }
+);
 
 // Main loop
 let last = performance.now();
@@ -120,7 +202,8 @@ function tick(now) {
   last = now;
 
   gameplay.update(dt);
-  world.update(gameplay.time);
+  const stage = gameplay.getCurrentStage();
+  world.update(gameplay.time, gameplay.shotMode ? null : stage ? stage.target : null);
   if (!gameplay.shotMode) {
     vfx.update(dt);
   }
