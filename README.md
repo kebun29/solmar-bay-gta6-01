@@ -16,7 +16,7 @@ Then open `http://localhost:8080` in your browser.
 
 ## Highlights
 
-- **7 Coastal Districts**: Explore Marina Boulevard's Art-Deco strip, Azura Downtown, Mangrove Bazaar night market, Pelican Harbor, Hibiscus Heights, Verdant Industrial, and Isla Dorada across the Bay Suspension Bridge.
-- **High-Speed CBPD Pursuits**: Escalating wanted levels with sculpted interceptors, window-firing tactical units, helicopter spotlight overwatch, and coastal patrol boats.
-- **On-Foot Combat & Crew**: 5-slot weapon loadout, articulated character combat, and 3 unlockable crew abilities (Signal Blackout, Nitro Surge, Flare Screen).
-- **Tropical-Noir HUD & Save System**: Circular radar minimap, organic peninsula world map, procedural Web Audio radio/SFX, and a 3-slot local save system.
+- **7 Coastal Districts & Procedural IBL**: Explore Marina Boulevard's Art-Deco strip, Azura Downtown, Mangrove Bazaar night market, Pelican Harbor, Hibiscus Heights, Verdant Industrial, and Isla Dorada across the Bay Suspension Bridge — lit by procedural PMREM sunset and neon-night environment maps, curved palm fronds, and rain-slicked reflections.
+- **Hero Vehicles & Escalating 1–5 Star CBPD Pursuits**: Drive the livery-detailed **CORSAIR V12** with tinted cabin interior and blue-orange nitro afterburners against **CBPD Interceptors** with procedural badge liveries, window-firing tactical units, Star 3 roadblocks, Star 4 **EAGLE-2** helicopter spotlight overwatch, and Star 5 **CBPD SWAT** strike squads.
+- **Articulated On-Foot Combat & Reactive World**: Non-boxy articulated characters with tactical vests/helmets, 5-slot weapons with ejected brass casings and sparks, steaming neon night-market stalls, panic-fleeing pedestrians, and braking civilian traffic.
+- **7-Tab Syndicate Dossier & Interactive World Shops**: Fully interactive `MAP`, `STORY` (mission replay), `STATS`, `CREW` (cash upgrades), `SETTINGS` (audio/graphics/FOV/time), `CONTROLS`, and `SAVE` (3-slot save/load/delete) tabs, plus live **Marina Garage** (repair, respray, turbo) and **Bazaar Arms Dealer** (ammo, armor, medkit) world markers (`E`).

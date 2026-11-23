@@ -19,6 +19,9 @@ export class SoundEngine {
     this.sirenGain = null;
     this.stationIndex = 0;
     this.muted = false;
+    this.masterVol = 0.7;
+    this.musicVol = 0.6;
+    this.sfxVol = 0.8;
     this.step = 0;
     this.nextBeatTime = 0;
     this.initialized = false;
@@ -81,7 +84,28 @@ export class SoundEngine {
   setMuted(muted) {
     this.muted = muted;
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(muted ? 0 : 0.42, this.ctx.currentTime, 0.04);
+      this.master.gain.setTargetAtTime(muted ? 0 : this.masterVol * 0.6, this.ctx.currentTime, 0.04);
+    }
+  }
+
+  setMasterVolume(v) {
+    this.masterVol = Math.max(0, Math.min(1, v));
+    if (this.master && this.ctx && !this.muted) {
+      this.master.gain.setTargetAtTime(this.masterVol * 0.6, this.ctx.currentTime, 0.04);
+    }
+  }
+
+  setMusicVolume(v) {
+    this.musicVol = Math.max(0, Math.min(1, v));
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(this.musicVol * 0.4, this.ctx.currentTime, 0.04);
+    }
+  }
+
+  setSfxVolume(v) {
+    this.sfxVol = Math.max(0, Math.min(1, v));
+    if (this.sfxGain && this.ctx) {
+      this.sfxGain.gain.setTargetAtTime(this.sfxVol * 0.9, this.ctx.currentTime, 0.04);
     }
   }
 

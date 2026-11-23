@@ -413,8 +413,9 @@ function createRoadTexture() {
 }
 
 export class World {
-  constructor(scene) {
+  constructor(scene, renderer = null) {
     this.scene = scene;
+    this.renderer = renderer;
     this.isNight = false;
     this.colliders = [];
     this.palms = [];
@@ -424,9 +425,14 @@ export class World {
     this.buildingMats = [];
     this.yachts = [];
     this.sidewalkPeds = [];
+    this.steamPuffs = [];
+    this.interactiveMarkers = [];
+    this.sunsetEnvMap = null;
+    this.nightEnvMap = null;
 
     this._buildLighting();
     this._buildSky();
+    this._buildEnvironment();
     this._buildTerrainAndCoast();
     this._buildBaySuspensionBridge();
     this._buildRoads();
@@ -436,6 +442,7 @@ export class World {
     this._buildBeachAndPalms();
     this._buildStreetlights();
     this._buildYachtsAndPeds();
+    this._buildInteractiveLocations();
   }
 
   _buildLighting() {
@@ -525,11 +532,95 @@ export class World {
     this.scene.fog = new THREE.FogExp2(0xe69c78, 0.0036);
   }
 
+  _buildEnvironment() {
+    if (!this.renderer) return;
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      pmrem.compileEquirectangularShader();
+
+      // Sunset procedural equirectangular reflection map (golden horizon + coral zenith + turquoise bay reflection)
+      const sc = document.createElement('canvas');
+      sc.width = 512;
+      sc.height = 256;
+      const sctx = sc.getContext('2d');
+      const sg = sctx.createLinearGradient(0, 0, 0, 256);
+      sg.addColorStop(0.0, '#1e2756');
+      sg.addColorStop(0.28, '#8a4f7d');
+      sg.addColorStop(0.45, '#ff8e53');
+      sg.addColorStop(0.51, '#ffe6a3');
+      sg.addColorStop(0.58, '#2b4f6e');
+      sg.addColorStop(1.0, '#121824');
+      sctx.fillStyle = sg;
+      sctx.fillRect(0, 0, 512, 256);
+      // Bright sun specular hotspot + warm coastal reflections
+      const sunRad = sctx.createRadialGradient(368, 118, 4, 368, 118, 86);
+      sunRad.addColorStop(0.0, 'rgba(255, 252, 230, 1.0)');
+      sunRad.addColorStop(0.3, 'rgba(255, 198, 110, 0.85)');
+      sunRad.addColorStop(1.0, 'rgba(255, 130, 80, 0.0)');
+      sctx.fillStyle = sunRad;
+      sctx.fillRect(0, 0, 512, 256);
+      // Warm city window / neon accent reflections along horizon
+      const accentCols = ['#fb7185', '#fbbf24', '#22d3ee', '#ff9e64'];
+      for (let i = 0; i < 16; i++) {
+        sctx.fillStyle = accentCols[i % accentCols.length];
+        sctx.globalAlpha = 0.35;
+        sctx.fillRect((i * 33) % 512, 122 + (i % 3) * 4, 18, 6);
+      }
+      sctx.globalAlpha = 1;
+      const sunsetEq = new THREE.CanvasTexture(sc);
+      sunsetEq.mapping = THREE.EquirectangularReflectionMapping;
+      sunsetEq.colorSpace = THREE.SRGBColorSpace;
+      this.sunsetEnvMap = pmrem.fromEquirectangular(sunsetEq).texture;
+      sunsetEq.dispose();
+
+      // Night neon procedural equirectangular reflection map (deep indigo sky + vivid coral/cyan/gold neon strips)
+      const nc = document.createElement('canvas');
+      nc.width = 512;
+      nc.height = 256;
+      const nctx = nc.getContext('2d');
+      const ng = nctx.createLinearGradient(0, 0, 0, 256);
+      ng.addColorStop(0.0, '#070d1f');
+      ng.addColorStop(0.38, '#162344');
+      ng.addColorStop(0.5, '#2b2048');
+      ng.addColorStop(0.62, '#141a2b');
+      ng.addColorStop(1.0, '#080b14');
+      nctx.fillStyle = ng;
+      nctx.fillRect(0, 0, 512, 256);
+      const neonBands = [
+        { x: 40, y: 112, w: 64, h: 16, col: '#fb7185' },
+        { x: 130, y: 108, w: 72, h: 18, col: '#22d3ee' },
+        { x: 225, y: 114, w: 68, h: 16, col: '#fbbf24' },
+        { x: 320, y: 110, w: 70, h: 18, col: '#f97316' },
+        { x: 415, y: 112, w: 66, h: 16, col: '#c084fc' },
+      ];
+      neonBands.forEach((b) => {
+        const rg = nctx.createRadialGradient(b.x + b.w / 2, b.y + b.h / 2, 4, b.x + b.w / 2, b.y + b.h / 2, 54);
+        rg.addColorStop(0, b.col);
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        nctx.fillStyle = rg;
+        nctx.fillRect(b.x - 40, b.y - 40, b.w + 80, b.h + 80);
+      });
+      const nightEq = new THREE.CanvasTexture(nc);
+      nightEq.mapping = THREE.EquirectangularReflectionMapping;
+      nightEq.colorSpace = THREE.SRGBColorSpace;
+      this.nightEnvMap = pmrem.fromEquirectangular(nightEq).texture;
+      nightEq.dispose();
+
+      pmrem.dispose();
+      this.scene.environment = this.sunsetEnvMap;
+    } catch {
+      // Fallback if PMREM unavailable
+    }
+  }
+
   setMode(mode) {
     const night = mode === 'night';
     this.isNight = night;
     this.skyMat.map = night ? this.nightSkyTex : this.sunsetSkyTex;
     this.skyMat.needsUpdate = true;
+    if (this.sunsetEnvMap && this.nightEnvMap) {
+      this.scene.environment = night ? this.nightEnvMap : this.sunsetEnvMap;
+    }
     if (this.sunGroup) this.sunGroup.visible = !night;
     if (this.sunPathMesh) this.sunPathMesh.visible = !night;
 
@@ -1025,13 +1116,14 @@ export class World {
     tileTex.wrapT = THREE.RepeatWrapping;
     tileTex.repeat.set(8, 10);
 
-    // Wet reflective plaza ground
+    // Wet reflective plaza ground (sharp envMap reflections + glossy wet cobblestones)
     const plaza = new THREE.Mesh(
       new THREE.PlaneGeometry(48, 58),
       new THREE.MeshStandardMaterial({
         map: tileTex,
-        roughness: 0.14,
-        metalness: 0.44,
+        roughness: 0.11,
+        metalness: 0.56,
+        envMapIntensity: 1.75,
       })
     );
     plaza.rotation.x = -Math.PI / 2;
@@ -1039,24 +1131,27 @@ export class World {
     plaza.receiveShadow = true;
     this.scene.add(plaza);
 
-    // Subtle realistic wet reflective puddles across the bazaar floor
+    // Subtle realistic wet reflective puddles + elongated neon sheen streaks across the bazaar floor
     const puddles = [
       { x: -39, z: 55, w: 4.8, d: 3.4, col: 0xff8c52 },
       { x: -46, z: 58, w: 5.4, d: 3.8, col: 0x22d3ee },
       { x: -42, z: 64, w: 4.5, d: 3.2, col: 0xfb7185 },
       { x: -51, z: 55, w: 4.2, d: 3.0, col: 0xfbbf24 },
       { x: -35, z: 61, w: 4.0, d: 2.8, col: 0x38bdf8 },
+      { x: -56, z: 54, w: 3.8, d: 2.6, col: 0xf43f5e },
+      { x: -55, z: 65, w: 4.1, d: 2.9, col: 0x34d399 },
     ];
     puddles.forEach((pd) => {
-      // Dark glossy water puddle base
+      // Dark mirror-like water puddle base reflecting neon sky/envMap
       const waterBase = new THREE.Mesh(
-        new THREE.CircleGeometry(1, 20),
+        new THREE.CircleGeometry(1, 22),
         new THREE.MeshStandardMaterial({
-          color: 0x0b1220,
-          roughness: 0.05,
-          metalness: 0.85,
+          color: 0x0a1322,
+          roughness: 0.03,
+          metalness: 0.94,
+          envMapIntensity: 2.1,
           transparent: true,
-          opacity: 0.52,
+          opacity: 0.64,
         })
       );
       waterBase.rotation.x = -Math.PI / 2;
@@ -1064,22 +1159,21 @@ export class World {
       waterBase.position.set(pd.x, 0.028, pd.z);
       this.scene.add(waterBase);
 
-      // Soft muted neon bounce reflection on the puddle surface
-      const pMesh = new THREE.Mesh(
-        new THREE.CircleGeometry(1, 20),
+      // Elongated natural neon reflection streak on wet asphalt
+      const streak = new THREE.Mesh(
+        new THREE.PlaneGeometry(pd.w * 1.15, pd.d * 0.42),
         new THREE.MeshBasicMaterial({
           map: getGlowTexture(),
           color: pd.col,
           transparent: true,
-          opacity: 0.085,
+          opacity: 0.24,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
       );
-      pMesh.rotation.x = -Math.PI / 2;
-      pMesh.scale.set(pd.w * 0.9, pd.d * 0.9, 1);
-      pMesh.position.set(pd.x, 0.032, pd.z);
-      this.scene.add(pMesh);
+      streak.rotation.x = -Math.PI / 2;
+      streak.position.set(pd.x, 0.033, pd.z);
+      this.scene.add(streak);
     });
 
     // Entrance Neon Arch
@@ -1168,18 +1262,44 @@ export class World {
       g.add(neonHalo);
       this.lanternGlows.push(neonHalo);
 
-      // Hanging red/gold paper lanterns beneath awning eaves
-      [-2.1, 0, 2.1].forEach((lx) => {
+      // Hanging denser red/gold paper lanterns with dark end-caps beneath awning eaves
+      const capMat = new THREE.MeshBasicMaterial({ color: 0x1a1210 });
+      [-2.5, -1.25, 0, 1.25, 2.5].forEach((lx, lIdx) => {
+        const isGold = lIdx % 2 === 1;
         const lantern = new THREE.Mesh(
-          new THREE.SphereGeometry(0.22, 8, 8),
-          new THREE.MeshBasicMaterial({ color: lx === 0 ? 0xffd166 : 0xff4d4d })
+          new THREE.SphereGeometry(0.21, 10, 8),
+          new THREE.MeshBasicMaterial({ color: isGold ? 0xffd166 : 0xff3b3b })
         );
-        lantern.scale.set(1, 1.35, 1);
-        lantern.position.set(lx, 2.75, 1.45);
+        lantern.scale.set(1, 1.38, 1);
+        lantern.position.set(lx, 2.74, 1.48);
         g.add(lantern);
+
+        const capTop = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.06, 8), capMat);
+        capTop.position.set(lx, 3.02, 1.48);
+        g.add(capTop);
+        const capBot = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.08, 0.06, 8), capMat);
+        capBot.position.set(lx, 2.46, 1.48);
+        g.add(capBot);
       });
 
-      const warmGlow = createGlowSprite(0xffb454, 2.5, 0.85);
+      // Rising steam / cooking vapor above ramen, grill, noodle & tea stalls
+      if (['NIGHT RAMEN', 'CORAL GRILL', 'NOODLE BAR', 'MANGROVE TEA', 'SPICE COVE'].includes(sp.sign)) {
+        for (let st = 0; st < 4; st++) {
+          const steam = createGlowSprite(0xfff1dc, 1.25 + st * 0.42, 0.36 - st * 0.05);
+          steam.material.blending = THREE.NormalBlending;
+          const baseY = 1.65 + st * 0.62;
+          steam.position.set(-1.55 + Math.sin(st * 1.4) * 0.24, baseY, 0.15 + Math.cos(st * 1.1) * 0.16);
+          g.add(steam);
+          this.steamPuffs.push({
+            sprite: steam,
+            baseX: -1.55,
+            baseY: 1.55,
+            phase: st * 0.25 + sp.x * 0.07,
+          });
+        }
+      }
+
+      const warmGlow = createGlowSprite(0xffb454, 2.8, 0.88);
       warmGlow.position.set(0, 2.7, 0.9);
       g.add(warmGlow);
       this.lanternGlows.push(warmGlow);
@@ -1248,36 +1368,63 @@ export class World {
       this.colliders.push({ x: c.x, z: c.z, hw: 1.0, hd: 1.0 });
     });
 
-    // Overhead string cables with soft radial-gradient glowing lanterns
-    const wireMat = new THREE.LineBasicMaterial({ color: 0x222630 });
-    const lanternColors = [0xffa94d, 0xfb7185, 0xffd166, 0x22d3ee];
-    const stringRows = [47, 55, 63, 71];
+    // Overhead string cables with denser red/gold paper lanterns + criss-crossing neon cables
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x1e2430 });
+    const lanternColors = [0xff3b3b, 0xffd166, 0xff5a36, 0xfbbf24, 0xfb7185, 0xffc857];
+    const stringRows = [45, 51, 57, 63, 69, 75];
     stringRows.forEach((zRow, rIdx) => {
       const pts = [];
-      for (let step = 0; step <= 8; step++) {
-        const t = step / 8;
-        const x = -25 - t * 36;
-        const sag = Math.sin(t * Math.PI) * 1.1;
-        pts.push(new THREE.Vector3(x, 6.4 - sag, zRow));
+      const steps = 12;
+      for (let step = 0; step <= steps; step++) {
+        const t = step / steps;
+        const x = -24 - t * 38;
+        const sag = Math.sin(t * Math.PI) * 1.05;
+        pts.push(new THREE.Vector3(x, 7.35 - sag, zRow));
       }
       const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
       this.scene.add(new THREE.Line(lineGeo, wireMat));
 
-      for (let step = 1; step < 8; step++) {
+      for (let step = 1; step < steps; step++) {
         const p = pts[step];
         const col = lanternColors[(step + rIdx) % lanternColors.length];
         const bulb = new THREE.Mesh(
-          new THREE.SphereGeometry(0.17, 8, 8),
+          new THREE.SphereGeometry(0.16, 9, 8),
           new THREE.MeshBasicMaterial({ color: col })
         );
+        bulb.scale.set(1, 1.3, 1);
         bulb.position.copy(p).add(new THREE.Vector3(0, -0.22, 0));
         this.scene.add(bulb);
 
-        const sprite = createGlowSprite(col, 2.7, 0.88);
+        const sprite = createGlowSprite(col, 1.85, 0.82);
         sprite.position.copy(bulb.position);
         this.scene.add(sprite);
         this.lanternGlows.push(sprite);
       }
+    });
+
+    // Criss-crossing diagonal neon cables & glowing neon light tubes overhead across the night market
+    const diagNeonSpecs = [
+      { a: [-26, 7.2, 44], b: [-60, 6.8, 72], col: 0x22d3ee },
+      { a: [-26, 7.0, 74], b: [-60, 7.3, 46], col: 0xfb7185 },
+      { a: [-30, 6.2, 43], b: [-58, 6.1, 60], col: 0xfbbf24 },
+      { a: [-30, 6.1, 76], b: [-58, 6.3, 56], col: 0x38bdf8 },
+    ];
+    diagNeonSpecs.forEach((dn) => {
+      const curvePts = [];
+      const pA = new THREE.Vector3(...dn.a);
+      const pB = new THREE.Vector3(...dn.b);
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        const p = new THREE.Vector3().lerpVectors(pA, pB, t);
+        p.y -= Math.sin(t * Math.PI) * 0.85;
+        curvePts.push(p);
+      }
+      const curve = new THREE.CatmullRomCurve3(curvePts);
+      const neonTube = new THREE.Mesh(
+        new THREE.TubeGeometry(curve, 20, 0.045, 6, false),
+        new THREE.MeshBasicMaterial({ color: dn.col, transparent: true, opacity: 0.92 })
+      );
+      this.scene.add(neonTube);
     });
 
     // Vibrant night-market point lights reflecting off wet floor
@@ -1294,7 +1441,69 @@ export class World {
 
   _buildBeachAndPalms() {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7c5c43, roughness: 0.92 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x267c47, roughness: 0.72, side: THREE.DoubleSide });
+    const coconutMat = new THREE.MeshStandardMaterial({ color: 0x5c3d24, roughness: 0.85 });
+
+    // Procedural serrated palm-frond leaflet texture with alpha cutout
+    const fc = document.createElement('canvas');
+    fc.width = 256;
+    fc.height = 128;
+    const fctx = fc.getContext('2d');
+    fctx.clearRect(0, 0, 256, 128);
+    // Central pale-green rachis spine
+    fctx.fillStyle = '#4d9e57';
+    fctx.fillRect(0, 61, 250, 6);
+    // Layered angled palm leaflets tapering toward the tip
+    for (let i = 0; i < 20; i++) {
+      const t = i / 19;
+      const x = 14 + t * 228;
+      const len = Math.sin(t * Math.PI * 0.92 + 0.14) * 56;
+      const w = 8 - t * 3;
+      const shade = i % 2 === 0 ? '#1f7a3f' : '#2b8f4e';
+      fctx.fillStyle = shade;
+      // Upper leaflet
+      fctx.beginPath();
+      fctx.moveTo(x - w * 0.5, 62);
+      fctx.quadraticCurveTo(x + 6, 62 - len * 0.65, x + 14, 62 - len);
+      fctx.quadraticCurveTo(x + 2, 62 - len * 0.55, x + w * 0.5, 62);
+      fctx.fill();
+      // Lower leaflet
+      fctx.beginPath();
+      fctx.moveTo(x - w * 0.5, 66);
+      fctx.quadraticCurveTo(x + 6, 66 + len * 0.65, x + 14, 66 + len);
+      fctx.quadraticCurveTo(x + 2, 66 + len * 0.55, x + w * 0.5, 66);
+      fctx.fill();
+    }
+    const frondTex = new THREE.CanvasTexture(fc);
+    frondTex.colorSpace = THREE.SRGBColorSpace;
+
+    const leafMat = new THREE.MeshStandardMaterial({
+      map: frondTex,
+      alphaTest: 0.35,
+      roughness: 0.65,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+
+    // Reusable curved palm frond geometry (parabolic arch + gentle lateral V-fold)
+    const makeCurvedFrondGeo = (length, width, droop) => {
+      const geo = new THREE.PlaneGeometry(length, width, 10, 2);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i); // -length/2 .. +length/2
+        const py = pos.getY(i); // -width/2 .. +width/2
+        const t = (px + length / 2) / length; // 0 at trunk .. 1 at tip
+        const archY = Math.sin(t * Math.PI * 0.72) * (length * 0.24) - t * t * droop;
+        const vFold = -Math.abs(py) * 0.28 * (0.4 + t * 0.6);
+        pos.setX(i, px + length / 2); // shift pivot to trunk base
+        pos.setY(i, archY + vFold);
+        pos.setZ(i, py);
+      }
+      geo.computeVertexNormals();
+      return geo;
+    };
+
+    const upperFrondGeo = makeCurvedFrondGeo(3.6, 1.45, 1.35);
+    const lowerFrondGeo = makeCurvedFrondGeo(4.25, 1.62, 2.15);
 
     const createPalm = (x, z, scale = 1, lean = 0.14) => {
       const g = new THREE.Group();
@@ -1302,34 +1511,55 @@ export class World {
 
       let cy = 0;
       let cx = 0;
-      const segs = 5;
+      const segs = 6;
       for (let i = 0; i < segs; i++) {
-        const h = 1.58 * scale;
-        const rBot = (0.31 - i * 0.035) * scale;
-        const rTop = (0.27 - i * 0.035) * scale;
-        const seg = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 7), trunkMat);
+        const h = 1.36 * scale;
+        const rBot = (0.31 - i * 0.032) * scale;
+        const rTop = (0.27 - i * 0.032) * scale;
+        const seg = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 8), trunkMat);
         seg.position.set(cx, cy + h / 2, 0);
-        seg.rotation.z = -lean * (i * 0.45);
+        seg.rotation.z = -lean * (i * 0.42);
         seg.castShadow = true;
         g.add(seg);
         cy += h * 0.94;
-        cx += Math.sin(lean * i * 0.45) * h * 0.45;
+        cx += Math.sin(lean * i * 0.42) * h * 0.44;
       }
 
       const crown = new THREE.Group();
       crown.position.set(cx, cy, 0);
-      for (let f = 0; f < 8; f++) {
-        const ang = (f / 8) * Math.PI * 2;
-        const frond = new THREE.Mesh(new THREE.ConeGeometry(0.62 * scale, 4.1 * scale, 4), leafMat);
-        frond.scale.set(1, 1, 0.22);
-        frond.position.set(Math.cos(ang) * 1.65 * scale, -0.25 * scale, Math.sin(ang) * 1.65 * scale);
-        frond.rotation.y = -ang;
-        frond.rotation.z = -1.18;
+
+      // Cluster of coconuts tucked beneath the fronds
+      for (let c = 0; c < 4; c++) {
+        const ca = (c / 4) * Math.PI * 2 + 0.4;
+        const nut = new THREE.Mesh(new THREE.SphereGeometry(0.16 * scale, 8, 6), coconutMat);
+        nut.position.set(Math.cos(ca) * 0.26 * scale, -0.18 * scale, Math.sin(ca) * 0.26 * scale);
+        crown.add(nut);
+      }
+
+      // Lower drooping curved fronds (7 fronds)
+      for (let f = 0; f < 7; f++) {
+        const ang = (f / 7) * Math.PI * 2;
+        const frond = new THREE.Mesh(lowerFrondGeo, leafMat);
+        frond.scale.setScalar(scale);
+        frond.rotation.y = ang;
+        frond.rotation.z = -0.08;
         frond.castShadow = true;
         crown.add(frond);
       }
+      // Upper arching crown fronds (5 fronds offset by half-step)
+      for (let f = 0; f < 5; f++) {
+        const ang = (f / 5) * Math.PI * 2 + 0.45;
+        const frond = new THREE.Mesh(upperFrondGeo, leafMat);
+        frond.scale.setScalar(scale);
+        frond.position.y = 0.14 * scale;
+        frond.rotation.y = ang;
+        frond.rotation.z = 0.26;
+        frond.castShadow = true;
+        crown.add(frond);
+      }
+
       g.add(crown);
-      g.add(createContactShadow(3.5 * scale, 3.5 * scale, 0.46));
+      g.add(createContactShadow(3.6 * scale, 3.6 * scale, 0.46));
       this.scene.add(g);
       this.palms.push({ crown, phase: x * 0.17 + z * 0.11 });
     };
@@ -1464,7 +1694,84 @@ export class World {
       p.mesh.rotation.y = ps.ry;
       p.setPose('walk', i * 0.9);
       this.scene.add(p.mesh);
-      this.sidewalkPeds.push({ char: p, phase: i * 1.1 });
+      this.sidewalkPeds.push({
+        char: p,
+        homeX: ps.x,
+        homeZ: ps.z,
+        baseRy: ps.ry,
+        phase: i * 1.1,
+        panicked: false,
+        panicTimer: 0,
+        fleeAngle: ps.ry,
+      });
+    });
+  }
+
+  _buildInteractiveLocations() {
+    const locations = [
+      {
+        id: 'garage',
+        name: 'MARINA GARAGE',
+        subtitle: 'Repair · Respray · Turbo',
+        x: -11.4,
+        z: 10.0,
+        radius: 6.5,
+        color: 0x22d3ee,
+      },
+      {
+        id: 'arms',
+        name: 'BAZAAR ARMS DEALER',
+        subtitle: 'Ammo · Titanium Armor · Medkit',
+        x: -36.5,
+        z: 73.5,
+        radius: 5.5,
+        color: 0xfb7185,
+      },
+    ];
+
+    locations.forEach((loc) => {
+      const g = new THREE.Group();
+      g.position.set(loc.x, 0.08, loc.z);
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(1.75, 2.25, 32),
+        new THREE.MeshBasicMaterial({
+          color: loc.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      g.add(ring);
+
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.4, 1.85, 5.4, 18, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: loc.color,
+          transparent: true,
+          opacity: 0.16,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      );
+      beam.position.y = 2.7;
+      g.add(beam);
+
+      const icon = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.55, 0),
+        new THREE.MeshBasicMaterial({ color: loc.color, wireframe: true })
+      );
+      icon.position.y = 2.2;
+      g.add(icon);
+
+      const glow = createGlowSprite(loc.color, 3.8, 0.65);
+      glow.position.y = 2.2;
+      g.add(glow);
+
+      this.scene.add(g);
+      this.interactiveMarkers.push({ ...loc, group: g, ring, icon, beam });
     });
   }
 
@@ -1481,6 +1788,20 @@ export class World {
     }
     if (this.oceanTex) {
       this.oceanTex.offset.y = (time * 0.025) % 1;
+    }
+    for (const sp of this.steamPuffs) {
+      const cycle = (time * 0.35 + sp.phase) % 1;
+      sp.sprite.position.y = sp.baseY + cycle * 2.55;
+      sp.sprite.position.x = sp.baseX + Math.sin(time * 1.8 + sp.phase * 6) * 0.24;
+      const sc = 0.95 + cycle * 1.55;
+      sp.sprite.scale.set(sc, sc, 1);
+      sp.sprite.material.opacity = Math.sin(cycle * Math.PI) * (this.isNight ? 0.32 : 0.12);
+    }
+    for (const m of this.interactiveMarkers) {
+      m.icon.rotation.y = time * 1.8;
+      m.icon.position.y = 2.15 + Math.sin(time * 2.6) * 0.25;
+      const pulse = 0.94 + Math.sin(time * 3.0) * 0.08;
+      m.ring.scale.set(pulse, pulse, 1);
     }
   }
 }

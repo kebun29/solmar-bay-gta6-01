@@ -70,6 +70,160 @@ function createExtrudedProfile(points, width, bevel = 0.08) {
   return geo;
 }
 
+let _cbpdDoorTex = null;
+function getCBPDDoorTexture() {
+  if (_cbpdDoorTex) return _cbpdDoorTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  // Crisp patrol white door background
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Subtle door seam vertical divider & handle
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.28)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(4, 4, 504, 248);
+  ctx.beginPath();
+  ctx.moveTo(262, 6);
+  ctx.lineTo(262, 250);
+  ctx.stroke();
+
+  // Tactical diagonal cyan + coral speed stripes along lower half
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 174, 512, 34);
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillRect(0, 166, 512, 12);
+  ctx.fillStyle = '#fb7185';
+  ctx.fillRect(0, 206, 512, 9);
+
+  // Diagonal tactical chevrons on rear quarter
+  ctx.fillStyle = '#38bdf8';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(410 + i * 26, 174);
+    ctx.lineTo(426 + i * 26, 174);
+    ctx.lineTo(412 + i * 26, 208);
+    ctx.lineTo(396 + i * 26, 208);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Golden CBPD Star Shield Badge
+  const bx = 92;
+  const by = 92;
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath();
+  ctx.arc(bx, by, 42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const r = i % 2 === 0 ? 27 : 12;
+    const a = (i * Math.PI) / 6 - Math.PI / 2;
+    const px = bx + Math.cos(a) * r;
+    const py = by + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Bold CBPD lettering
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '900 74px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('CBPD', 152, 84);
+
+  ctx.fillStyle = '#334155';
+  ctx.font = '800 20px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('CORALINA BAY POLICE', 154, 134);
+
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '900 18px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('INTERCEPTOR · 911', 28, 193);
+
+  _cbpdDoorTex = new THREE.CanvasTexture(c);
+  _cbpdDoorTex.colorSpace = THREE.SRGBColorSpace;
+  _cbpdDoorTex.anisotropy = 4;
+  return _cbpdDoorTex;
+}
+
+let _heroTopStripeTex = null;
+function getHeroTopStripeTexture() {
+  if (_heroTopStripeTex) return _heroTopStripeTex;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 256, 512);
+
+  // Twin matte-carbon racing stripes with gold pinstripes
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  ctx.fillRect(80, 0, 36, 512);
+  ctx.fillRect(140, 0, 36, 512);
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(72, 0, 5, 512);
+  ctx.fillRect(179, 0, 5, 512);
+
+  // Subtle hood & deck panel seams
+  ctx.strokeStyle = 'rgba(10, 14, 24, 0.45)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(16, 128); ctx.lineTo(240, 128);
+  ctx.moveTo(16, 384); ctx.lineTo(240, 384);
+  ctx.stroke();
+
+  _heroTopStripeTex = new THREE.CanvasTexture(c);
+  _heroTopStripeTex.colorSpace = THREE.SRGBColorSpace;
+  return _heroTopStripeTex;
+}
+
+let _heroSideSeamTex = null;
+function getHeroSideSeamTexture() {
+  if (_heroSideSeamTex) return _heroSideSeamTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 512, 128);
+
+  // Crisp door panel seam & sculpted side aero intake
+  ctx.strokeStyle = 'rgba(10, 14, 24, 0.62)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(128, 12, 230, 102);
+
+  // Gold/carbon lower rocker accent stripe
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(24, 92, 464, 16);
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(24, 86, 464, 4);
+
+  // Side aero vent scoop
+  ctx.fillStyle = '#0b0f18';
+  ctx.beginPath();
+  ctx.moveTo(356, 28);
+  ctx.lineTo(426, 20);
+  ctx.lineTo(418, 76);
+  ctx.lineTo(352, 72);
+  ctx.closePath();
+  ctx.fill();
+
+  // "CORSAIR V12" fender badge
+  ctx.fillStyle = '#fde68a';
+  ctx.font = '900 22px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('V12', 64, 62);
+
+  _heroSideSeamTex = new THREE.CanvasTexture(c);
+  _heroSideSeamTex.colorSpace = THREE.SRGBColorSpace;
+  return _heroSideSeamTex;
+}
+
 export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
   const root = new THREE.Group();
   const isPolice = type === 'police';
@@ -77,30 +231,35 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
 
   const paintMat = new THREE.MeshStandardMaterial({
     color: isPolice ? 0x0f172a : bodyColor,
-    metalness: isHero ? 0.68 : isPolice ? 0.45 : 0.48,
-    roughness: isHero ? 0.18 : isPolice ? 0.28 : 0.3,
+    metalness: isHero ? 0.78 : isPolice ? 0.52 : 0.55,
+    roughness: isHero ? 0.14 : isPolice ? 0.22 : 0.26,
+    envMapIntensity: isHero ? 1.75 : 1.35,
   });
   const carbonMat = new THREE.MeshStandardMaterial({
     color: 0x161b24,
-    metalness: 0.42,
-    roughness: 0.36,
+    metalness: 0.48,
+    roughness: 0.32,
+    envMapIntensity: 1.2,
   });
   const whiteMat = new THREE.MeshStandardMaterial({
     color: 0xf8fafc,
-    metalness: 0.22,
-    roughness: 0.34,
+    metalness: 0.28,
+    roughness: 0.26,
+    envMapIntensity: 1.25,
   });
   const glassMat = new THREE.MeshStandardMaterial({
-    color: 0x0a1c2e,
-    metalness: 0.92,
-    roughness: 0.08,
+    color: 0x0b1f33,
+    metalness: 0.94,
+    roughness: 0.05,
+    envMapIntensity: 2.0,
     transparent: true,
-    opacity: 0.88,
+    opacity: 0.56,
   });
   const chromeMat = new THREE.MeshStandardMaterial({
-    color: 0xdbeafe,
-    metalness: 0.9,
-    roughness: 0.16,
+    color: 0xe2e8f0,
+    metalness: 0.95,
+    roughness: 0.12,
+    envMapIntensity: 1.8,
   });
 
   // Soft contact shadow underneath
@@ -177,6 +336,42 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
   );
   root.add(glassCore);
 
+  // Visible Cabin Interior behind tinted glass: sculpted seats, headrests, dashboard, steering wheel & driver silhouette
+  const seatMat = new THREE.MeshStandardMaterial({
+    color: isHero ? 0x261620 : 0x1e2532,
+    roughness: 0.78,
+  });
+  const trimSeatMat = new THREE.MeshStandardMaterial({
+    color: isHero ? 0xfb7185 : 0x334155,
+    roughness: 0.65,
+  });
+  [-0.36, 0.36].forEach((sx) => {
+    // Seat backrest + bolster
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.14), seatMat);
+    back.position.set(sx, 1.04, -0.32);
+    back.rotation.x = -0.2;
+    root.add(back);
+    // Headrest
+    const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.12), trimSeatMat);
+    headrest.position.set(sx, 1.24, -0.38);
+    root.add(headrest);
+  });
+  // Dashboard & steering wheel
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.18, 0.34), carbonMat);
+  dash.position.set(0, 0.98, 0.48);
+  root.add(dash);
+  const wheelRim = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.025, 6, 14), carbonMat);
+  wheelRim.position.set(0.36, 1.04, 0.28);
+  wheelRim.rotation.x = 0.35;
+  root.add(wheelRim);
+  // Driver silhouette head/shoulders inside cabin
+  const driverHead = new THREE.Mesh(
+    new THREE.SphereGeometry(0.11, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+  );
+  driverHead.position.set(0.36, 1.18, -0.14);
+  root.add(driverHead);
+
   // Sculpted wheel-arch flares (4 semi-cylindrical housings)
   const archGeo = new THREE.TorusGeometry(0.46, 0.09, 8, 14, Math.PI);
   const archPositions = [
@@ -226,8 +421,49 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
     root.add(pipe);
   });
 
-  // Hero sports car exclusive: sculpted carbon hood vent, side intakes & GT wing spoiler
+  // Hero sports car exclusive: racing stripes, panel seams, sculpted hood vent, GT wing & blue-orange Nitro flames
+  let nitroGroup = null;
   if (isHero) {
+    // Hood & roof twin racing stripe decals
+    const stripeMat = new THREE.MeshStandardMaterial({
+      map: getHeroTopStripeTexture(),
+      transparent: true,
+      roughness: 0.25,
+      metalness: 0.4,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    const hoodStripe = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 1.38), stripeMat);
+    hoodStripe.rotation.x = -Math.PI / 2 + 0.14;
+    hoodStripe.position.set(0, 0.94, 1.38);
+    root.add(hoodStripe);
+
+    const roofStripe = new THREE.Mesh(new THREE.PlaneGeometry(1.16, 0.94), stripeMat);
+    roofStripe.rotation.x = -Math.PI / 2;
+    roofStripe.position.set(0, 1.39, -0.32);
+    root.add(roofStripe);
+
+    const deckStripe = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.78), stripeMat);
+    deckStripe.rotation.x = -Math.PI / 2 - 0.1;
+    deckStripe.position.set(0, 0.99, -1.78);
+    root.add(deckStripe);
+
+    // Side door seams & V12 aero vents (both flanks)
+    const sideMat = new THREE.MeshStandardMaterial({
+      map: getHeroSideSeamTexture(),
+      transparent: true,
+      roughness: 0.28,
+      metalness: 0.35,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    [-1, 1].forEach((side) => {
+      const sideDecal = new THREE.Mesh(new THREE.PlaneGeometry(2.55, 0.56), sideMat);
+      sideDecal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      sideDecal.position.set(side * 1.058, 0.64, -0.02);
+      root.add(sideDecal);
+    });
+
     const hoodVent = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.06, 0.85), carbonMat);
     hoodVent.position.set(0, 0.91, 1.32);
     hoodVent.rotation.x = 0.14;
@@ -250,22 +486,70 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
       strut.position.set(sx, 1.04, -2.08);
       root.add(strut);
     });
+
+    // Quad Blue-Orange Nitro Exhaust Flames (toggled during cover chase & nitro surge)
+    nitroGroup = new THREE.Group();
+    const innerFlameMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.96,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const outerFlameMat = new THREE.MeshBasicMaterial({
+      color: 0xff6b1a,
+      transparent: true,
+      opacity: 0.84,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    [-0.58, -0.42, 0.42, 0.58].forEach((ex, idx) => {
+      const len = idx === 0 || idx === 3 ? 1.25 : 1.62;
+      const outerCone = new THREE.Mesh(new THREE.ConeGeometry(0.088, len, 10, 1, true), outerFlameMat);
+      outerCone.rotation.x = -Math.PI / 2;
+      outerCone.position.set(ex, 0.34, -2.52 - len * 0.48);
+      nitroGroup.add(outerCone);
+
+      const innerCone = new THREE.Mesh(new THREE.ConeGeometry(0.052, len * 0.72, 10, 1, true), innerFlameMat);
+      innerCone.rotation.x = -Math.PI / 2;
+      innerCone.position.set(ex, 0.34, -2.5 - len * 0.34);
+      nitroGroup.add(innerCone);
+    });
+    [-0.5, 0.5].forEach((ex) => {
+      const blueBloom = createGlowSprite(0x0ea5e9, 0.95, 0.72);
+      blueBloom.position.set(ex, 0.34, -2.72);
+      nitroGroup.add(blueBloom);
+      const orangeBloom = createGlowSprite(0xff6b1a, 1.35, 0.52);
+      orangeBloom.position.set(ex, 0.34, -3.22);
+      nitroGroup.add(orangeBloom);
+    });
+    nitroGroup.visible = false;
+    root.add(nitroGroup);
   }
 
-  // Police Interceptor exclusive: white livery doors, ramming pushbar, glowing LED lightbar
+  // Police Interceptor exclusive: procedural CBPD livery doors, ramming pushbar, glowing LED lightbar
   let redGlow = null;
   let blueGlow = null;
   if (isPolice) {
-    const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.52, 1.72), whiteMat);
+    const doorLiveryMat = new THREE.MeshStandardMaterial({
+      map: getCBPDDoorTexture(),
+      roughness: 0.24,
+      metalness: 0.32,
+      envMapIntensity: 1.35,
+    });
+    const doorPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(2.13, 0.54, 1.92),
+      [doorLiveryMat, doorLiveryMat, whiteMat, whiteMat, whiteMat, whiteMat]
+    );
     doorPanel.position.set(0, 0.63, -0.02);
     root.add(doorPanel);
 
-    // Subtle coral/cyan CBPD side stripe
+    // Subtle coral/cyan CBPD side bumper trim
     const sideStripe = new THREE.Mesh(
-      new THREE.BoxGeometry(2.14, 0.08, 2.2),
+      new THREE.BoxGeometry(2.15, 0.06, 2.28),
       new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
     );
-    sideStripe.position.set(0, 0.55, -0.02);
+    sideStripe.position.set(0, 0.43, -0.02);
     root.add(sideStripe);
 
     // Heavy tactical push bumper
@@ -368,37 +652,54 @@ export function createVehicleMesh(type = 'hero', bodyColor = 0xf43f5e) {
     wheels.push(w);
   });
 
-  return { mesh: root, wheels, redGlow, blueGlow };
+  return { mesh: root, wheels, redGlow, blueGlow, paintMat, nitroGroup };
 }
 
-// Attach a CBPD officer leaning out of a cruiser's side window firing a carbine
+// Attach a non-boxy CBPD tactical officer leaning out of a cruiser's side window firing a carbine
 export function createWindowShooter(side = 1) {
   const g = new THREE.Group();
-  const copMat = new THREE.MeshStandardMaterial({ color: 0x172554, roughness: 0.7 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xdca984, roughness: 0.65 });
-  const gunMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.8, roughness: 0.28 });
+  const copMat = new THREE.MeshStandardMaterial({ color: 0x172554, roughness: 0.65 });
+  const vestMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.55, metalness: 0.25 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xdca984, roughness: 0.6 });
+  const gunMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.85, roughness: 0.25 });
 
-  // Torso leaning out window
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.44, 0.24), copMat);
+  // Sculpted torso + tactical vest leaning out window
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.24, 6, 12), copMat);
   torso.position.set(side * 0.14, 0.08, 0);
   torso.rotation.z = -side * 0.32;
   g.add(torso);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.24), skinMat);
-  head.position.set(side * 0.24, 0.36, 0.02);
+  const vest = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.165, 0.28, 10), vestMat);
+  vest.position.set(side * 0.15, 0.1, 0);
+  vest.rotation.z = -side * 0.32;
+  g.add(vest);
+
+  // Smooth sphere head + dome tactical helmet + ballistic visor
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 12), skinMat);
+  head.scale.set(0.95, 1.08, 1.0);
+  head.position.set(side * 0.24, 0.37, 0.02);
   g.add(head);
 
-  const cap = new THREE.Mesh(
-    new THREE.BoxGeometry(0.26, 0.09, 0.28),
-    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 })
+  const helmet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.152, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.6),
+    vestMat
   );
-  cap.position.set(side * 0.24, 0.49, 0.04);
-  g.add(cap);
+  helmet.position.set(side * 0.24, 0.39, 0.02);
+  g.add(helmet);
 
-  // Arms aiming outward toward the player
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.13, 0.13), copMat);
-  arm.position.set(side * 0.46, 0.18, 0.12);
+  const visor = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.148, 0.148, 0.075, 12, 1, true, -0.9, 1.8),
+    new THREE.MeshStandardMaterial({ color: 0x0c2438, metalness: 0.9, roughness: 0.1, side: THREE.DoubleSide })
+  );
+  visor.position.set(side * 0.25, 0.37, 0.03);
+  visor.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+  g.add(visor);
+
+  // Cylindrical/capsule arm aiming outward toward the player
+  const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.062, 0.42, 5, 10), copMat);
+  arm.rotation.z = Math.PI / 2;
   arm.rotation.y = -side * 0.22;
+  arm.position.set(side * 0.45, 0.18, 0.12);
   g.add(arm);
 
   const gun = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.1, 0.09), gunMat);
@@ -407,11 +708,11 @@ export function createWindowShooter(side = 1) {
   g.add(gun);
 
   // Bright multi-layer muzzle flash
-  const coreFlash = createGlowSprite(0xfff7d6, 1.8, 0.98);
+  const coreFlash = createGlowSprite(0xfff7d6, 1.9, 0.98);
   coreFlash.position.set(side * 1.12, 0.21, 0.25);
   g.add(coreFlash);
 
-  const outerFlash = createGlowSprite(0xff7b29, 3.1, 0.86);
+  const outerFlash = createGlowSprite(0xff7b29, 3.2, 0.88);
   outerFlash.position.set(side * 1.12, 0.21, 0.25);
   g.add(outerFlash);
 
@@ -419,7 +720,7 @@ export function createWindowShooter(side = 1) {
   return { group: g, muzzlePosLocal: new THREE.Vector3(side * 1.15, 0.21, 0.25) };
 }
 
-// Charred burning & exploding wrecked vehicle for dramatic highway chaos
+// Charred burning & exploding wrecked vehicle with flying debris, sharp embers, layered fire core & wind-blown smoke
 export function createBurningWreck() {
   const root = new THREE.Group();
   const base = createVehicleMesh('police');
@@ -427,25 +728,48 @@ export function createBurningWreck() {
   base.mesh.traverse((obj) => {
     if (obj.isMesh && obj.material && obj.material.color) {
       obj.material = obj.material.clone();
-      obj.material.color.multiplyScalar(0.28);
-      if (obj.material.roughness !== undefined) obj.material.roughness = 0.92;
+      obj.material.color.multiplyScalar(0.24);
+      if (obj.material.roughness !== undefined) obj.material.roughness = 0.94;
     }
   });
   if (base.redGlow) base.redGlow.visible = false;
   if (base.blueGlow) base.blueGlow.visible = false;
 
   // Tilted, crashed posture
-  base.mesh.rotation.z = 0.18;
-  base.mesh.rotation.x = -0.06;
+  base.mesh.rotation.z = 0.22;
+  base.mesh.rotation.x = -0.07;
   base.mesh.position.y = 0.08;
   root.add(base.mesh);
 
-  // Roaring multi-layered fire core & explosion bloom (balanced so wreck hull reads clearly)
+  // 3D Sculpted layered flame tongues rising from hood & cabin
+  const flameConeSpecs = [
+    { pos: [0.0, 1.35, 1.02], r: 0.48, h: 1.55, col: 0xfff3b0, op: 0.92 },
+    { pos: [0.22, 1.55, 0.82], r: 0.65, h: 2.15, col: 0xff7b1c, op: 0.78 },
+    { pos: [-0.28, 1.48, 1.15], r: 0.56, h: 1.9, col: 0xef4444, op: 0.74 },
+    { pos: [0.08, 1.75, 0.45], r: 0.52, h: 1.85, col: 0xff5a1f, op: 0.72 },
+  ];
+  flameConeSpecs.forEach((fc, idx) => {
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(fc.r, fc.h, 8),
+      new THREE.MeshBasicMaterial({
+        color: fc.col,
+        transparent: true,
+        opacity: fc.op,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    cone.position.set(fc.pos[0], fc.pos[1], fc.pos[2]);
+    cone.rotation.z = -0.18 + (idx % 2 === 0 ? 0.06 : -0.08);
+    root.add(cone);
+  });
+
+  // Layered roaring fire core sprites
   const fireSpecs = [
-    { pos: [0, 1.05, 1.05], col: 0xffe89e, scale: 2.2, op: 0.92 },
-    { pos: [0.28, 1.38, 0.78], col: 0xff6d1c, scale: 3.2, op: 0.82 },
-    { pos: [-0.38, 1.2, 1.15], col: 0xff3b1f, scale: 2.9, op: 0.78 },
-    { pos: [0.05, 1.85, 0.55], col: 0xff5a1f, scale: 2.7, op: 0.72 },
+    { pos: [0, 1.12, 1.05], col: 0xfff8d6, scale: 2.35, op: 0.96 },
+    { pos: [0.3, 1.48, 0.76], col: 0xff7b1c, scale: 3.4, op: 0.86 },
+    { pos: [-0.36, 1.25, 1.12], col: 0xe11d48, scale: 3.1, op: 0.82 },
+    { pos: [0.12, 2.02, 0.52], col: 0xff5a1f, scale: 2.9, op: 0.76 },
   ];
   fireSpecs.forEach((f) => {
     const s = createGlowSprite(f.col, f.scale, f.op);
@@ -453,21 +777,71 @@ export function createBurningWreck() {
     root.add(s);
   });
 
-  // Billowing dark smoke column rising above the wreck
-  for (let i = 0; i < 7; i++) {
-    const smoke = createGlowSprite(i < 2 ? 0x3b2c26 : 0x1c212b, 2.5 + i * 0.65, 0.72 - i * 0.05);
+  // Flying charred debris & metal shrapnel chunks + detached wheel on asphalt
+  const debrisMat = new THREE.MeshStandardMaterial({ color: 0x161920, roughness: 0.88, metalness: 0.45 });
+  const scorchedMat = new THREE.MeshStandardMaterial({
+    color: 0x1c1716,
+    emissive: 0xc2410c,
+    emissiveIntensity: 0.28,
+    roughness: 0.85,
+  });
+  const debrisChunks = [
+    { pos: [-1.1, 2.05, 1.35], size: [0.62, 0.06, 0.42], rot: [0.6, 0.4, 0.8], mat: scorchedMat },
+    { pos: [1.15, 1.75, 1.05], size: [0.48, 0.1, 0.22], rot: [0.3, 1.1, -0.5], mat: debrisMat },
+    { pos: [-0.85, 2.55, 0.55], size: [0.32, 0.07, 0.26], rot: [1.2, 0.5, 0.4], mat: scorchedMat },
+    { pos: [0.95, 2.35, 0.35], size: [0.28, 0.08, 0.22], rot: [0.8, -0.6, 1.1], mat: debrisMat },
+    { pos: [-1.45, 0.1, 1.65], size: [0.55, 0.08, 0.34], rot: [0.05, 0.9, 0.04], mat: debrisMat },
+    { pos: [1.45, 0.1, 1.45], size: [0.42, 0.09, 0.28], rot: [0.04, -0.4, 0.06], mat: scorchedMat },
+  ];
+  debrisChunks.forEach((d) => {
+    const chunk = new THREE.Mesh(new THREE.BoxGeometry(d.size[0], d.size[1], d.size[2]), d.mat);
+    chunk.position.set(d.pos[0], d.pos[1], d.pos[2]);
+    chunk.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
+    chunk.castShadow = true;
+    root.add(chunk);
+  });
+  // Detached burning wheel resting flat on asphalt near front fender
+  const looseWheel = createWheel(0.36, 0.26, false);
+  looseWheel.position.set(1.55, 0.15, 1.65);
+  looseWheel.rotation.set(Math.PI / 2 - 0.05, 0.3, 0.1);
+  root.add(looseWheel);
+
+  // Sharp glowing ember streaks blasting outward from the fire core
+  const emberMat = new THREE.MeshBasicMaterial({
+    color: 0xffd166,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  for (let e = 0; e < 18; e++) {
+    const ang = (e / 18) * Math.PI * 2 + (e % 3) * 0.22;
+    const dist = 1.05 + (e % 4) * 0.55;
+    const h = 1.3 + (e % 5) * 0.52;
+    const streak = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.028, 0.42 + (e % 3) * 0.18, 5), emberMat);
+    streak.position.set(Math.cos(ang) * dist, h, 0.85 + Math.sin(ang) * dist * 0.75);
+    streak.rotation.set((e % 2 === 0 ? 1 : -1) * 0.65, ang, -0.55);
+    root.add(streak);
+  }
+
+  // Dense wind-blown dark smoke column rising & curving with coastal wind
+  for (let i = 0; i < 10; i++) {
+    const t = i / 9;
+    const smokeCol = i < 2 ? 0x5c2c1d : i < 4 ? 0x2a2120 : 0x161a24;
+    const smoke = createGlowSprite(smokeCol, 2.3 + i * 0.62, 0.78 - t * 0.34);
     smoke.material.blending = THREE.NormalBlending;
+    // Wind drifts column smoothly toward +X and -Z
     smoke.position.set(
-      (i % 2 === 0 ? 1 : -1) * 0.3 + i * 0.22,
-      2.1 + i * 1.1,
-      0.5 - i * 0.25
+      0.15 + Math.pow(t, 1.35) * 3.8 + (i % 2 === 0 ? 0.25 : -0.22),
+      2.05 + i * 0.95,
+      0.75 - Math.pow(t, 1.25) * 2.4
     );
     root.add(smoke);
   }
 
   // Warm fire point light illuminating nearby asphalt & cars
-  const fireLight = new THREE.PointLight(0xff6b22, 18, 22, 1.5);
-  fireLight.position.set(0, 2.2, 0.8);
+  const fireLight = new THREE.PointLight(0xff6b22, 24, 26, 1.45);
+  fireLight.position.set(0, 2.3, 0.9);
   root.add(fireLight);
 
   return root;
@@ -659,7 +1033,7 @@ export function createYacht(scale = 1.0) {
   return g;
 }
 
-// Articulated character (player, CBPD officer, or tropical sidewalk pedestrian)
+// Articulated non-boxy character (player, CBPD SWAT officer, or tropical sidewalk pedestrian)
 export function createCharacter(role = 'player', pedStyleIdx = 0) {
   const root = new THREE.Group();
   const isCop = role === 'cop';
@@ -667,26 +1041,28 @@ export function createCharacter(role = 'player', pedStyleIdx = 0) {
   const isPed = role === 'ped';
 
   const pedPalettes = [
-    { jacket: 0xfb7185, shirt: 0xffffff, pants: 0x334155, skin: 0xdca782 },
-    { jacket: 0x14b8a6, shirt: 0xfef08a, pants: 0x1e293b, skin: 0xc68a63 },
-    { jacket: 0xf59e0b, shirt: 0xf8fafc, pants: 0x475569, skin: 0xe2b796 },
-    { jacket: 0x8b5cf6, shirt: 0xfda4af, pants: 0x1f2937, skin: 0xb97c56 },
-    { jacket: 0x38bdf8, shirt: 0xfef3c7, pants: 0x374151, skin: 0xd9a27c },
+    { jacket: 0xfb7185, shirt: 0xffffff, pants: 0x334155, skin: 0xdca782, hair: 0x1e1512 },
+    { jacket: 0x14b8a6, shirt: 0xfef08a, pants: 0x1e293b, skin: 0xc68a63, hair: 0x2a1c14 },
+    { jacket: 0xf59e0b, shirt: 0xf8fafc, pants: 0x475569, skin: 0xe2b796, hair: 0x4a2f1d },
+    { jacket: 0x8b5cf6, shirt: 0xfda4af, pants: 0x1f2937, skin: 0xb97c56, hair: 0x111827 },
+    { jacket: 0x38bdf8, shirt: 0xfef3c7, pants: 0x374151, skin: 0xd9a27c, hair: 0x3b2416 },
   ];
   const pp = pedPalettes[pedStyleIdx % pedPalettes.length];
 
-  const jacketColor = isPlayer ? 0x181c28 : isCop ? 0x132043 : pp.jacket;
+  const jacketColor = isPlayer ? 0x1a1f2e : isCop ? 0x132043 : pp.jacket;
   const shirtColor = isPlayer ? 0xfb7185 : isCop ? 0x22d3ee : pp.shirt;
   const pantsColor = isPlayer ? 0x1f2430 : isCop ? 0x0f172a : pp.pants;
   const skinColor = isPlayer ? 0xd8a47f : isCop ? 0xe0b592 : pp.skin;
 
-  const jacketMat = new THREE.MeshStandardMaterial({ color: jacketColor, roughness: 0.72 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.7 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.8 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.65 });
-  const gunMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.75, roughness: 0.3 });
+  const jacketMat = new THREE.MeshStandardMaterial({ color: jacketColor, roughness: 0.68, metalness: 0.08 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.65 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.78 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.58 });
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x11151c, roughness: 0.65, metalness: 0.15 });
+  const gearMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.52, metalness: 0.28 });
+  const gunMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.82, roughness: 0.25 });
 
-  const shadow = createContactShadow(1.15, 1.15, 0.56);
+  const shadow = createContactShadow(1.15, 1.15, 0.58);
   root.add(shadow);
 
   const rig = new THREE.Group();
@@ -696,45 +1072,151 @@ export function createCharacter(role = 'player', pedStyleIdx = 0) {
   hips.position.set(0, 0.94, 0);
   rig.add(hips);
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.25), jacketMat);
-  torso.position.y = 0.28;
+  // Pelvis / belt base
+  const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.165, 0.16, 12), pantsMat);
+  pelvis.scale.set(1.18, 1, 0.72);
+  pelvis.position.y = 0.02;
+  hips.add(pelvis);
+
+  // Sculpted rounded torso (tapered capsule/cylinder, non-boxy)
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.175, 0.5, 14), jacketMat);
+  torso.scale.set(1.1, 1, 0.66);
+  torso.position.y = 0.3;
   torso.castShadow = true;
   hips.add(torso);
 
-  const innerShirt = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.265), shirtMat);
-  innerShirt.position.set(0, 0.28, 0.005);
-  hips.add(innerShirt);
+  // Collar / inner shirt strip (player & peds) or CBPD SWAT tactical plate carrier vest + pouches + belt
+  if (isCop) {
+    const vest = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.205, 0.39, 12), gearMat);
+    vest.scale.set(1.1, 1, 0.74);
+    vest.position.y = 0.32;
+    vest.castShadow = true;
+    hips.add(vest);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 0.26), skinMat);
-  head.position.y = 0.72;
+    // Front tactical mag pouches & CBPD cyan chest patch
+    [-0.09, 0, 0.09].forEach((px) => {
+      const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.11, 0.05), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65 }));
+      pouch.position.set(px, 0.23, 0.17);
+      hips.add(pouch);
+    });
+    const badgePatch = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.045, 0.02), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+    badgePatch.position.set(0, 0.42, 0.175);
+    hips.add(badgePatch);
+
+    // Tactical utility belt
+    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.195, 0.195, 0.065, 12), gearMat);
+    belt.scale.set(1.15, 1, 0.76);
+    belt.position.y = 0.09;
+    hips.add(belt);
+  } else {
+    const innerShirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.46, 10), shirtMat);
+    innerShirt.scale.set(0.95, 1, 0.72);
+    innerShirt.position.set(0, 0.3, 0.055);
+    hips.add(innerShirt);
+
+    if (isPlayer) {
+      // Stylish open jacket lapel collar
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.032, 8, 14, Math.PI * 1.4), jacketMat);
+      collar.rotation.x = Math.PI / 2;
+      collar.rotation.z = -Math.PI * 0.2;
+      collar.position.set(0, 0.54, -0.01);
+      hips.add(collar);
+    }
+  }
+
+  // Smooth neck & sphere/capsule head
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.068, 0.11, 10), skinMat);
+  neck.position.y = 0.59;
+  hips.add(neck);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 16, 14), skinMat);
+  head.scale.set(0.94, 1.08, 0.98);
+  head.position.y = 0.73;
   head.castShadow = true;
   hips.add(head);
 
-  const cap = new THREE.Mesh(
-    new THREE.BoxGeometry(0.28, 0.1, 0.3),
-    new THREE.MeshStandardMaterial({ color: isCop ? 0x0f172a : 0x1c1917, roughness: 0.8 })
-  );
-  cap.position.set(0, 0.86, 0.02);
-  hips.add(cap);
+  if (isCop) {
+    // Ballistic dome SWAT tactical helmet + curved visor + comms headset
+    const helmet = new THREE.Mesh(
+      new THREE.SphereGeometry(0.162, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      gearMat
+    );
+    helmet.position.set(0, 0.75, -0.005);
+    helmet.castShadow = true;
+    hips.add(helmet);
+
+    const visor = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.156, 0.156, 0.075, 14, 1, true, -0.85, 1.7),
+      new THREE.MeshStandardMaterial({
+        color: 0x0b253d,
+        metalness: 0.92,
+        roughness: 0.08,
+        envMapIntensity: 1.6,
+        side: THREE.DoubleSide,
+      })
+    );
+    visor.position.set(0, 0.735, 0.015);
+    hips.add(visor);
+  } else {
+    // Sculpted layered hair crown
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: isPlayer ? 0x141218 : pp.hair,
+      roughness: 0.78,
+    });
+    const hairDome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.154, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
+      hairMat
+    );
+    hairDome.scale.set(0.98, 1.05, 1.04);
+    hairDome.position.set(0, 0.755, -0.015);
+    hips.add(hairDome);
+
+    if (isPlayer) {
+      // Sleek sunset aviator shades on player
+      const shades = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, 0.045, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.9, roughness: 0.12 })
+      );
+      shades.position.set(0, 0.74, 0.125);
+      hips.add(shades);
+    }
+  }
 
   function makeArm(side) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.31, 0.5, 0);
+    shoulder.position.set(side * 0.275, 0.5, 0);
     hips.add(shoulder);
 
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, 0.14), jacketMat);
+    // Smooth spherical shoulder joint / SWAT shoulder pad
+    const shJoint = new THREE.Mesh(
+      new THREE.SphereGeometry(isCop ? 0.088 : 0.072, 10, 8),
+      isCop ? gearMat : jacketMat
+    );
+    shoulder.add(shJoint);
+
+    // Smooth capsule upper arm
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.062, 0.19, 6, 10), jacketMat);
     upper.position.y = -0.14;
     upper.castShadow = true;
     shoulder.add(upper);
 
     const elbow = new THREE.Group();
-    elbow.position.set(0, -0.29, 0);
+    elbow.position.set(0, -0.28, 0);
     shoulder.add(elbow);
 
-    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.12), skinMat);
-    forearm.position.y = -0.14;
+    // Smooth elbow joint
+    const elJoint = new THREE.Mesh(new THREE.SphereGeometry(0.056, 8, 8), isCop ? gearMat : jacketMat);
+    elbow.add(elJoint);
+
+    // Smooth capsule forearm + rounded hand
+    const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.052, 0.18, 6, 10), isCop ? jacketMat : skinMat);
+    forearm.position.y = -0.13;
     forearm.castShadow = true;
     elbow.add(forearm);
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 8), isCop ? gearMat : skinMat);
+    hand.position.y = -0.26;
+    elbow.add(hand);
 
     return { shoulder, elbow };
   }
@@ -743,16 +1225,20 @@ export function createCharacter(role = 'player', pedStyleIdx = 0) {
   const rightArm = makeArm(1);
 
   const weaponGroup = new THREE.Group();
-  weaponGroup.position.set(0, -0.28, 0.12);
-  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.52), gunMat);
+  weaponGroup.position.set(0, -0.27, 0.12);
+  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.115, 0.5), gunMat);
   receiver.position.set(0, 0, 0.18);
   weaponGroup.add(receiver);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.36, 8), gunMat);
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.16, 0.08), gunMat);
+  mag.position.set(0, -0.1, 0.22);
+  mag.rotation.x = 0.2;
+  weaponGroup.add(mag);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8), gunMat);
   barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0.02, 0.54);
+  barrel.position.set(0, 0.02, 0.52);
   weaponGroup.add(barrel);
 
-  const muzzleFlash = createGlowSprite(0xffb84d, 1.45, 0.0);
+  const muzzleFlash = createGlowSprite(0xffb84d, 1.55, 0.0);
   muzzleFlash.position.set(0, 0.02, 0.78);
   weaponGroup.add(muzzleFlash);
   if (!isPed) {
@@ -761,22 +1247,46 @@ export function createCharacter(role = 'player', pedStyleIdx = 0) {
 
   function makeLeg(side) {
     const hip = new THREE.Group();
-    hip.position.set(side * 0.13, 0, 0);
+    hip.position.set(side * 0.125, -0.02, 0);
     hips.add(hip);
 
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.46, 0.16), pantsMat);
-    thigh.position.y = -0.22;
+    // Smooth capsule thigh
+    const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.078, 0.28, 6, 10), pantsMat);
+    thigh.position.y = -0.21;
     thigh.castShadow = true;
     hip.add(thigh);
 
+    // Tactical drop-leg pistol holster on CBPD SWAT right thigh
+    if (isCop && side === 1) {
+      const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.086, 0.045, 10), gearMat);
+      strap.position.y = -0.18;
+      hip.add(strap);
+      const holster = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.17, 0.095), gearMat);
+      holster.position.set(0.085, -0.19, 0.02);
+      hip.add(holster);
+    }
+
     const knee = new THREE.Group();
-    knee.position.set(0, -0.45, 0);
+    knee.position.set(0, -0.43, 0);
     hip.add(knee);
 
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.46, 0.15), pantsMat);
-    shin.position.y = -0.22;
+    // Smooth knee joint / SWAT kneepad
+    const knJoint = new THREE.Mesh(
+      new THREE.SphereGeometry(isCop ? 0.072 : 0.064, 8, 8),
+      isCop ? gearMat : pantsMat
+    );
+    knee.add(knJoint);
+
+    // Smooth capsule shin + tactical boot
+    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.064, 0.28, 6, 10), pantsMat);
+    shin.position.y = -0.21;
     shin.castShadow = true;
     knee.add(shin);
+
+    const boot = new THREE.Mesh(new THREE.CapsuleGeometry(0.068, 0.11, 6, 8), bootMat);
+    boot.rotation.x = Math.PI / 2;
+    boot.position.set(0, -0.42, 0.045);
+    knee.add(boot);
 
     return { hip, knee };
   }
@@ -911,7 +1421,7 @@ export class VFXManager {
 
   spawnSparks(pos, count = 8) {
     for (let i = 0; i < count; i++) {
-      const s = createGlowSprite(i % 2 === 0 ? 0xffd166 : 0xff6b29, 0.6 + Math.random() * 0.45, 0.96);
+      const s = createGlowSprite(i % 2 === 0 ? 0xffd166 : 0xff6b29, 0.55 + Math.random() * 0.48, 0.96);
       s.position.copy(pos);
       this.scene.add(s);
       this.items.push({
@@ -925,6 +1435,36 @@ export class VFXManager {
         life: 0.38 + Math.random() * 0.22,
         maxLife: 0.55,
         type: 'spark',
+      });
+    }
+  }
+
+  spawnCasings(pos, count = 4, frozen = false) {
+    const brassMat = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      emissive: 0x92400e,
+      emissiveIntensity: 0.35,
+      metalness: 0.9,
+      roughness: 0.22,
+    });
+    for (let i = 0; i < count; i++) {
+      const casing = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.085, 6), brassMat);
+      casing.position.copy(pos).add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * (frozen ? 0.85 : 0.16),
+          (Math.random() - 0.3) * (frozen ? 0.55 : 0.12),
+          (Math.random() - 0.5) * (frozen ? 0.85 : 0.16)
+        )
+      );
+      casing.rotation.set(Math.random() * 3.14, Math.random() * 3.14, Math.random() * 3.14);
+      this.scene.add(casing);
+      this.items.push({
+        mesh: casing,
+        vel: new THREE.Vector3((Math.random() - 0.5) * 3.2, 2.2 + Math.random() * 2.0, (Math.random() - 0.5) * 3.2),
+        grow: 0,
+        life: frozen ? 99 : 1.1 + Math.random() * 0.5,
+        maxLife: frozen ? 99 : 1.5,
+        type: 'casing',
       });
     }
   }
@@ -976,12 +1516,22 @@ export class VFXManager {
       it.mesh.position.addScaledVector(it.vel, dt);
       if (it.type === 'spark') {
         it.vel.y -= 14 * dt;
+      } else if (it.type === 'casing') {
+        it.vel.y -= 12 * dt;
+        it.mesh.rotation.x += dt * 11;
+        it.mesh.rotation.z += dt * 9;
+        if (it.mesh.position.y < 0.04) {
+          it.mesh.position.y = 0.04;
+          it.vel.y *= -0.35;
+          it.vel.x *= 0.65;
+          it.vel.z *= 0.65;
+        }
       }
       if (it.grow !== 0) {
         const s = Math.max(0.1, it.mesh.scale.x + it.grow * dt);
         it.mesh.scale.set(s, s, 1);
       }
-      if (it.mesh.material) {
+      if (it.mesh.material && it.type !== 'casing') {
         it.mesh.material.opacity = ratio * (it.type === 'smoke' ? 0.45 : 0.95);
       }
     }

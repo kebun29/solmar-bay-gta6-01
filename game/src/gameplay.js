@@ -18,9 +18,48 @@ export const WEAPONS = [
 ];
 
 export const CREW_ABILITIES = [
-  { key: 'Z', id: 'blackout', name: 'SIGNAL BLACKOUT', crew: 'Maya Lin · Hacker', accent: '#22d3ee', maxCd: 24, cd: 0 },
-  { key: 'X', id: 'nitro', name: 'NITRO SURGE', crew: 'Rico Vega · Driver', accent: '#fb7185', maxCd: 18, cd: 0 },
-  { key: 'C', id: 'flare', name: 'FLARE SCREEN', crew: 'Dante Cruz · Tactician', accent: '#c084fc', maxCd: 22, cd: 0 },
+  {
+    key: 'Z',
+    id: 'blackout',
+    name: 'SIGNAL BLACKOUT',
+    crew: 'Maya Lin · Hacker',
+    role: 'netrunner',
+    bio: 'Ex-grid security architect. Scrambles CBPD dispatch towers and drops wanted heat.',
+    accent: '#22d3ee',
+    maxCd: 24,
+    cd: 0,
+    level: 1,
+    maxLevel: 3,
+    upgradeCost: 2400,
+  },
+  {
+    key: 'X',
+    id: 'nitro',
+    name: 'NITRO SURGE',
+    crew: 'Rico Vega · Driver',
+    role: 'tuner',
+    bio: 'Marina street-racing mechanic. Injects twin-stage nitrous and patches chassis damage.',
+    accent: '#fb7185',
+    maxCd: 18,
+    cd: 0,
+    level: 1,
+    maxLevel: 3,
+    upgradeCost: 2200,
+  },
+  {
+    key: 'C',
+    id: 'flare',
+    name: 'FLARE SCREEN',
+    crew: 'Dante Cruz · Tactician',
+    role: 'fixer',
+    bio: 'Former harbor tactical fixer. Pops thermal smoke cover and deploys titanium armor plates.',
+    accent: '#c084fc',
+    maxCd: 22,
+    cd: 0,
+    level: 1,
+    maxLevel: 3,
+    upgradeCost: 2600,
+  },
 ];
 
 export const MISSIONS = [
@@ -97,17 +136,31 @@ export function getDefaultSaves() {
 }
 
 export class Gameplay {
-  constructor(scene, world, vfx, sound, camera) {
+  constructor(scene, world, vfx, sound, camera, renderer = null) {
     this.scene = scene;
     this.world = world;
     this.vfx = vfx;
     this.sound = sound;
     this.camera = camera;
+    this.renderer = renderer;
 
     this.mode = 'start';
     this.shotMode = null;
     this.pauseTab = 'STATS';
     this.time = 0;
+
+    this.settings = {
+      graphics: 'HIGH',
+      cameraFov: 56,
+      timeOfDay: 'sunset',
+    };
+    this.nitroTimer = 0;
+    this.turboInstalled = false;
+    this.nearbyLocation = null;
+    this.activeShop = null; // 'garage' | 'arms' | null
+    this.lastGunshotPos = null;
+    this.lastGunshotTime = -99;
+    this.roadblockPlaced = false;
 
     this.inVehicle = true;
     this.health = 88;
@@ -217,6 +270,178 @@ export class Gameplay {
     this.clockText = slot.time;
     this.startNewOrContinue(false);
     return true;
+  }
+
+  deleteSlot(slotNum) {
+    const idx = this.saves.findIndex((s) => s.slot === slotNum);
+    if (idx === -1) return;
+    this.saves[idx] = {
+      slot: slotNum,
+      occupied: false,
+      act: 'EMPTY',
+      district: 'No save data',
+      cash: 0,
+      rank: 1,
+      rp: 0,
+      completion: 0,
+      time: '--:--',
+      accent: '#475569',
+    };
+    try {
+      localStorage.removeItem(SAVE_PREFIX + slotNum);
+    } catch {
+      // Ignore storage errors
+    }
+    this.sound.playClick();
+  }
+
+  replayMission(missionIdx) {
+    if (missionIdx < 0 || missionIdx >= MISSIONS.length) return;
+    this.shotMode = null;
+    this.activeShop = null;
+    this.missionIdx = missionIdx;
+    this.stageIdx = 0;
+    this.mode = 'play';
+    const isBazaar = missionIdx === 2;
+    this.world.setMode(isBazaar ? 'night' : 'sunset');
+    this.settings.timeOfDay = isBazaar ? 'night' : 'sunset';
+    if (isBazaar) {
+      this.inVehicle = false;
+      this.playerChar.mesh.visible = true;
+      this.playerChar.mesh.position.set(-34, 0, 56);
+      this.wantedStars = 3;
+      this.clockText = '23:15';
+      this.dialogue = {
+        speaker: 'MAYA LIN',
+        role: 'netrunner',
+        text: 'Mission replay live — sweep Mangrove Bazaar and clear CBPD units!',
+        timer: 7,
+      };
+    } else {
+      this.inVehicle = true;
+      this.currentVehicle = this.heroVehicle;
+      this.playerChar.mesh.visible = false;
+      this.heroVehicle.mesh.position.set(1.5, 0, -22);
+      this.heroVehicle.heading = Math.PI;
+      this.heroVehicle.speed = 22;
+      this.wantedStars = missionIdx === 1 ? 4 : 2;
+      this.clockText = '17:42';
+      this.dialogue = {
+        speaker: 'VALERIA REYES',
+        role: 'broker',
+        text: `Contract "${MISSIONS[missionIdx].title}" active — hit the boulevard!`,
+        timer: 7,
+      };
+    }
+    this.sound.playAbility();
+  }
+
+  upgradeCrew(idx) {
+    const ab = this.crew[idx];
+    if (!ab || ab.level >= ab.maxLevel) return false;
+    if (this.cash < ab.upgradeCost) return false;
+    this.cash -= ab.upgradeCost;
+    ab.level += 1;
+    ab.maxCd = Math.max(8, ab.maxCd - 4);
+    ab.upgradeCost = Math.round(ab.upgradeCost * 1.65);
+    this.sound.playAbility();
+    return true;
+  }
+
+  applySettings({ graphics, cameraFov, timeOfDay } = {}) {
+    if (graphics) {
+      this.settings.graphics = graphics;
+      if (this.renderer) {
+        const dpr = graphics === 'HIGH' ? Math.min(window.devicePixelRatio || 1, 2) : graphics === 'MEDIUM' ? 1.25 : 0.85;
+        this.renderer.setPixelRatio(dpr);
+        this.renderer.shadowMap.enabled = graphics !== 'LOW';
+      }
+    }
+    if (typeof cameraFov === 'number') {
+      this.settings.cameraFov = cameraFov;
+      this.camera.fov = cameraFov;
+      this.camera.updateProjectionMatrix();
+    }
+    if (timeOfDay) {
+      this.settings.timeOfDay = timeOfDay;
+      this.world.setMode(timeOfDay);
+      this.clockText = timeOfDay === 'night' ? '23:18' : '17:42';
+    }
+  }
+
+  interactNearby() {
+    if (this.mode !== 'play') return;
+    if (this.activeShop) {
+      this.activeShop = null;
+      this.sound.playClick();
+      return;
+    }
+    if (this.nearbyLocation) {
+      this.activeShop = this.nearbyLocation.id;
+      this.sound.playClick();
+    }
+  }
+
+  closeShop() {
+    this.activeShop = null;
+    this.sound.playClick();
+  }
+
+  buyGarageService(service, paintHex = null) {
+    const v = this.currentVehicle || this.heroVehicle;
+    if (!v) return false;
+    if (service === 'repair') {
+      if (this.cash < 500 || v.damagePct <= 0) return false;
+      this.cash -= 500;
+      v.damagePct = 0;
+      this.vfx.spawnSparks(v.mesh.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 10);
+      this.sound.playAbility();
+      return true;
+    }
+    if (service === 'paint' && paintHex !== null) {
+      if (this.cash < 750) return false;
+      this.cash -= 750;
+      if (v.paintMat) v.paintMat.color.setHex(paintHex);
+      this.sound.playAbility();
+      return true;
+    }
+    if (service === 'turbo') {
+      if (this.cash < 2500 || this.turboInstalled) return false;
+      this.cash -= 2500;
+      this.turboInstalled = true;
+      this.heroVehicle.maxSpeed = 58;
+      this.nitroTimer = 3.0;
+      this.sound.playAbility();
+      return true;
+    }
+    return false;
+  }
+
+  buyArmsService(service) {
+    if (service === 'ammo') {
+      if (this.cash < 600) return false;
+      this.cash -= 600;
+      this.weapons.forEach((w) => {
+        if (w.maxAmmo !== '∞') w.ammo = w.maxAmmo;
+      });
+      this.sound.playAbility();
+      return true;
+    }
+    if (service === 'armor') {
+      if (this.cash < 800 || this.armour >= 100) return false;
+      this.cash -= 800;
+      this.armour = 100;
+      this.sound.playAbility();
+      return true;
+    }
+    if (service === 'medkit') {
+      if (this.cash < 400 || this.health >= 100) return false;
+      this.cash -= 400;
+      this.health = 100;
+      this.sound.playAbility();
+      return true;
+    }
+    return false;
   }
 
   _spawnInitialWorldEntities() {
@@ -387,6 +612,7 @@ export class Gameplay {
       this.heroVehicle.mesh.rotation.y = this.heroVehicle.heading;
       this.heroVehicle.speed = 37.22; // 134 KM/H
       this.heroVehicle.damagePct = 21; // 79% INTACT
+      if (this.heroVehicle.nitroGroup) this.heroVehicle.nitroGroup.visible = true;
 
       // 5 CBPD Interceptors surrounding the hero car!
       const c1 = this.vehicles[1]; // INTERCEPT-1 ramming right flank
@@ -488,6 +714,7 @@ export class Gameplay {
       this.world.setMode('night');
       this.inVehicle = false;
       this.playerChar.mesh.visible = true;
+      if (this.heroVehicle.nitroGroup) this.heroVehicle.nitroGroup.visible = false;
       if (this.burningWreck) this.burningWreck.visible = false;
       if (this.windowShooter) this.windowShooter.shooter.group.visible = false;
 
@@ -531,7 +758,10 @@ export class Gameplay {
       const pMuzzle = this.playerChar.getMuzzleWorldPos();
       this.vfx.spawnTracer(pMuzzle, new THREE.Vector3(-47.2, 1.35, 53.7), 99, 0xffffff);
       this.vfx.spawnTracer(new THREE.Vector3(-46.8, 1.32, 54.0), new THREE.Vector3(-36.2, 1.25, 55.8), 99, 0xffe4b5);
-      this.vfx.spawnSparks(new THREE.Vector3(-47.1, 1.32, 53.6), 12);
+      this.vfx.spawnSparks(new THREE.Vector3(-47.1, 1.32, 53.6), 16);
+      this.vfx.spawnSparks(new THREE.Vector3(-36.4, 1.2, 54.6), 10);
+      this.vfx.spawnCasings(pMuzzle.clone().add(new THREE.Vector3(0.45, -0.05, 0.2)), 6, true);
+      this.vfx.spawnCasings(new THREE.Vector3(-47.0, 1.2, 53.9), 4, true);
 
       this.missionIdx = 2;
       this.stageIdx = 1;
@@ -571,6 +801,7 @@ export class Gameplay {
       this.mode = 'start';
       this.world.setMode('sunset');
       this.playerChar.mesh.visible = false;
+      if (this.heroVehicle.nitroGroup) this.heroVehicle.nitroGroup.visible = false;
       if (this.burningWreck) this.burningWreck.visible = false;
       if (this.windowShooter) this.windowShooter.shooter.group.visible = false;
 
@@ -706,11 +937,12 @@ export class Gameplay {
       };
     } else if (ab.id === 'nitro') {
       if (this.inVehicle && this.currentVehicle) {
-        this.currentVehicle.speed = Math.min(this.currentVehicle.maxSpeed + 12, this.currentVehicle.speed + 16);
-        this.currentVehicle.damagePct = Math.max(0, this.currentVehicle.damagePct - 25);
+        this.nitroTimer = 3.5 + ab.level * 0.8;
+        this.currentVehicle.speed = Math.min(this.currentVehicle.maxSpeed + 14, this.currentVehicle.speed + 16 + ab.level * 2);
+        this.currentVehicle.damagePct = Math.max(0, this.currentVehicle.damagePct - (20 + ab.level * 8));
         this.vfx.spawnSparks(this.currentVehicle.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 10);
       } else {
-        this.health = Math.min(100, this.health + 20);
+        this.health = Math.min(100, this.health + 20 + ab.level * 6);
       }
       this.dialogue = {
         speaker: 'RICO VEGA',
@@ -750,6 +982,11 @@ export class Gameplay {
     this.sound.playShot(w.id);
 
     const origin = this.playerChar.getMuzzleWorldPos();
+    this.lastGunshotPos = origin.clone();
+    this.lastGunshotTime = this.time;
+    if (w.id > 0) {
+      this.vfx.spawnCasings(origin, 2, false);
+    }
     const h = this.playerChar.mesh.rotation.y;
     const dir = new THREE.Vector3(Math.sin(h), 0, Math.cos(h)).normalize();
     const end = origin.clone().addScaledVector(dir, w.range);
@@ -810,11 +1047,20 @@ export class Gameplay {
       return;
     }
 
-    if (this.mode === 'pause') {
+    if (this.mode === 'pause' || this.activeShop) {
       return;
     }
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
+    this.nitroTimer = Math.max(0, this.nitroTimer - dt);
+    if (this.heroVehicle && this.heroVehicle.nitroGroup) {
+      const boosting = this.inVehicle && this.currentVehicle === this.heroVehicle && (this.nitroTimer > 0 || (this.input.shift && Math.abs(this.heroVehicle.speed) > 22));
+      this.heroVehicle.nitroGroup.visible = boosting;
+      if (boosting) {
+        const flicker = 0.85 + Math.sin(this.time * 48) * 0.22;
+        this.heroVehicle.nitroGroup.scale.set(1, 1, flicker);
+      }
+    }
     for (const ab of this.crew) {
       if (ab.cd > 0) ab.cd = Math.max(0, ab.cd - dt);
     }
@@ -898,37 +1144,172 @@ export class Gameplay {
     }
 
     const pPos = this.getPlayerPos();
+
+    // Interactive World Locations proximity detection (Marina Garage & Bazaar Arms Dealer)
+    this.nearbyLocation = null;
+    for (const loc of this.world.interactiveMarkers) {
+      if (Math.hypot(pPos.x - loc.x, pPos.z - loc.z) <= loc.radius) {
+        this.nearbyLocation = loc;
+        break;
+      }
+    }
+
+    // Real 1–5 Star Wanted Escalation + Reactive Civilian Traffic Braking
+    let policeIdx = 0;
     for (const v of this.vehicles) {
       if (v === this.currentVehicle) continue;
-      if (v.type === 'police' && this.wantedStars > 0) {
+      if (v.type === 'police') {
+        policeIdx += 1;
+        if (this.wantedStars <= 0) {
+          v.tactic = 'PATROL';
+          continue;
+        }
         const dx = pPos.x - v.mesh.position.x;
         const dz = pPos.z - v.mesh.position.z;
         const dist = Math.hypot(dx, dz);
+
+        // Star 3+: dedicate unit #4 as a roadblock cruiser angled across the boulevard ahead of player
+        if (this.wantedStars >= 3 && policeIdx === 4) {
+          v.tactic = 'BLOCKADE';
+          if (!this.roadblockPlaced || dist > 95) {
+            const pHead = this.getPlayerHeading();
+            const aheadZ = Math.max(-180, Math.min(180, pPos.z + Math.cos(pHead) * 52));
+            v.mesh.position.set(pPos.x > 0 ? 3.2 : -3.2, 0, aheadZ);
+            v.heading = Math.PI / 2 + 0.35;
+            v.mesh.rotation.y = v.heading;
+            v.speed = 0;
+            this.roadblockPlaced = true;
+          }
+          continue;
+        }
+
+        // Star 1: only 1 patrol cruiser tails at moderate speed; Star 2+: full interceptors ramming
+        const activeLimit = this.wantedStars === 1 ? 1 : this.wantedStars === 2 ? 3 : 5;
+        if (policeIdx > activeLimit) {
+          v.tactic = 'STANDBY';
+          continue;
+        }
+
         const desiredH = Math.atan2(dx, dz);
         let diff = desiredH - v.heading;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        v.heading += Math.max(-2.2 * dt, Math.min(2.2 * dt, diff));
-        const targetSpd = dist > 10 ? 27 : 16;
+        v.heading += Math.max(-2.4 * dt, Math.min(2.4 * dt, diff));
+        const baseSpd = this.wantedStars === 1 ? 19 : this.wantedStars === 2 ? 28 : 34;
+        const targetSpd = dist > 9 ? baseSpd : this.wantedStars >= 2 ? 22 : 12;
         v.speed += (targetSpd - v.speed) * dt * 2.5;
         v.mesh.position.x += Math.sin(v.heading) * v.speed * dt;
         v.mesh.position.z += Math.cos(v.heading) * v.speed * dt;
         v.mesh.rotation.y = v.heading;
         v.wheels.forEach((w) => { w.rotation.x += v.speed * dt * 2.2; });
-        v.tactic = dist < 14 ? 'RAMMING' : 'PINCHING';
+        v.tactic = this.wantedStars === 1 ? 'PATROL' : dist < 14 ? 'RAMMING' : 'PINCHING';
       } else if (v.type === 'civilian') {
+        // Reactive AI: check ahead in lane for any blocking vehicle and brake smoothly
+        const fwdX = Math.sin(v.heading);
+        const fwdZ = Math.cos(v.heading);
+        let blocked = false;
+        for (const other of this.vehicles) {
+          if (other === v) continue;
+          const ox = other.mesh.position.x - v.mesh.position.x;
+          const oz = other.mesh.position.z - v.mesh.position.z;
+          const forwardDist = ox * fwdX + oz * fwdZ;
+          const lateralDist = Math.abs(ox * fwdZ - oz * fwdX);
+          if (forwardDist > 1.5 && forwardDist < 13.5 && lateralDist < 2.8) {
+            blocked = true;
+            break;
+          }
+        }
+        const desiredSpd = blocked ? 0 : 11;
+        v.speed += (desiredSpd - v.speed) * Math.min(1, dt * (blocked ? 7.5 : 2.2));
         v.mesh.position.z += Math.cos(v.heading) * v.speed * dt;
+        v.wheels.forEach((w) => { w.rotation.x += v.speed * dt * 2.2; });
         if (v.mesh.position.z < -200) v.mesh.position.z = 200;
         if (v.mesh.position.z > 200) v.mesh.position.z = -200;
       }
     }
 
-    if (this.heli && this.wantedStars >= 3) {
-      const targetX = pPos.x + Math.cos(this.time * 0.45) * 18;
-      const targetZ = pPos.z + Math.sin(this.time * 0.45) * 18;
-      this.heli.mesh.position.x += (targetX - this.heli.mesh.position.x) * dt * 1.4;
-      this.heli.mesh.position.z += (targetZ - this.heli.mesh.position.z) * dt * 1.4;
-      this.heli.mesh.lookAt(pPos.x, 12, pPos.z);
+    // Star 4+: Helicopter EAGLE-2 spotlight overwatch
+    if (this.heli) {
+      this.heli.mesh.visible = this.wantedStars >= 4;
+      if (this.wantedStars >= 4) {
+        const targetX = pPos.x + Math.cos(this.time * 0.45) * 18;
+        const targetZ = pPos.z + Math.sin(this.time * 0.45) * 18;
+        this.heli.mesh.position.x += (targetX - this.heli.mesh.position.x) * dt * 1.4;
+        this.heli.mesh.position.z += (targetZ - this.heli.mesh.position.z) * dt * 1.4;
+        this.heli.mesh.lookAt(pPos.x, 12, pPos.z);
+      }
+    }
+
+    // Star 5: CBPD SWAT strike squad advancing & engaging player
+    if (this.wantedStars >= 5 || !this.inVehicle) {
+      for (const c of this.cops) {
+        if (c.downed) continue;
+        const dx = pPos.x - c.char.mesh.position.x;
+        const dz = pPos.z - c.char.mesh.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (this.wantedStars >= 5 && dist > 65) {
+          c.char.mesh.position.set(pPos.x + (Math.random() - 0.5) * 20, 0, pPos.z - 22);
+        }
+        if (dist < 48) {
+          c.char.mesh.rotation.y = Math.atan2(dx, dz);
+          if (dist > 14) {
+            const step = 4.6 * dt;
+            c.char.mesh.position.x += (dx / dist) * step;
+            c.char.mesh.position.z += (dz / dist) * step;
+            c.char.setPose('run', this.time);
+          } else {
+            c.char.setPose('aim', this.time);
+            c.fireCd -= dt;
+            if (c.fireCd <= 0) {
+              c.fireCd = 1.15 + Math.random() * 0.6;
+              c.char.triggerMuzzleFlash(0.08);
+              const muzzle = c.char.getMuzzleWorldPos();
+              this.vfx.spawnTracer(muzzle, pPos.clone().add(new THREE.Vector3(0, 1.1, 0)), 0.12, 0xffe4b5);
+              this.vfx.spawnCasings(muzzle, 1, false);
+              if (this.armour > 0) this.armour = Math.max(0, this.armour - 4);
+              else this.health = Math.max(10, this.health - 5);
+            }
+          }
+        }
+      }
+    }
+
+    // Reactive Pedestrian AI: flee in panic from nearby gunshots or high-speed pursuits
+    const recentGunshot = this.lastGunshotPos && (this.time - this.lastGunshotTime) < 6.0;
+    const chaseSpeed = this.inVehicle && this.currentVehicle ? Math.abs(this.currentVehicle.speed) : 0;
+    for (const ped of this.world.sidewalkPeds) {
+      const px = ped.char.mesh.position.x;
+      const pz = ped.char.mesh.position.z;
+      let threatX = null;
+      let threatZ = null;
+      if (recentGunshot && Math.hypot(px - this.lastGunshotPos.x, pz - this.lastGunshotPos.z) < 28) {
+        threatX = this.lastGunshotPos.x;
+        threatZ = this.lastGunshotPos.z;
+      } else if (this.wantedStars >= 1 && chaseSpeed > 14 && Math.hypot(px - pPos.x, pz - pPos.z) < 18) {
+        threatX = pPos.x;
+        threatZ = pPos.z;
+      }
+      if (threatX !== null) {
+        ped.panicked = true;
+        ped.panicTimer = 5.0;
+        ped.fleeAngle = Math.atan2(px - threatX, pz - threatZ);
+      }
+      if (ped.panicTimer > 0) {
+        ped.panicTimer -= dt;
+        const fleeSpd = 5.4 * dt;
+        ped.char.mesh.position.x = Math.max(-16.2, Math.min(-12.6, px + Math.sin(ped.fleeAngle) * fleeSpd));
+        ped.char.mesh.position.z += Math.cos(ped.fleeAngle) * fleeSpd;
+        ped.char.mesh.rotation.y = ped.fleeAngle;
+        ped.char.setPose('run', this.time + ped.phase);
+      } else {
+        ped.panicked = false;
+        ped.char.mesh.position.z += Math.cos(ped.baseRy) * 1.1 * dt;
+        if (Math.abs(ped.char.mesh.position.z - ped.homeZ) > 12) {
+          ped.baseRy += Math.PI;
+        }
+        ped.char.mesh.rotation.y = ped.baseRy;
+        ped.char.setPose('walk', this.time + ped.phase);
+      }
     }
 
     const stage = this.getCurrentStage();

@@ -1,4 +1,5 @@
 import { DISTRICTS } from './world.js';
+import { MISSIONS } from './gameplay.js';
 
 const UNIT_SVGS = {
   heli: `<svg viewBox="0 0 18 18" width="13" height="13"><path d="M2 5h14M9 5v3M5 8h7l2 3H5l-2-2 2-1zm1 5h7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
@@ -71,10 +72,15 @@ export class UIController {
     this.hudEl = document.getElementById('hud');
     this.pauseEl = document.getElementById('pause-screen');
     this.startEl = document.getElementById('start-screen');
+    this.statsViewEl = document.getElementById('pause-stats-view');
+    this.tabViewEl = document.getElementById('pause-tab-view');
+    this.shopModalEl = document.getElementById('shop-modal');
     this.minimapCanvas = document.getElementById('minimap-canvas');
     this.minimapCtx = this.minimapCanvas.getContext('2d');
     this.worldMapCanvas = document.getElementById('world-map-canvas');
     this.worldMapCtx = this.worldMapCanvas.getContext('2d');
+    this._renderedTabSig = '';
+    this._renderedShopSig = '';
 
     this._bindEvents();
     this._renderStaticPauseParts();
@@ -91,8 +97,13 @@ export class UIController {
       this.g.loadFromSlot(2);
     });
     document.getElementById('btn-settings').addEventListener('click', () => {
-      this.sound.setMuted(!this.sound.muted);
+      this.g.mode = 'pause';
+      this.g.pauseTab = 'SETTINGS';
+      this._renderedTabSig = '';
       this.sound.playClick();
+    });
+    document.getElementById('shop-close-btn').addEventListener('click', () => {
+      this.g.closeShop();
     });
 
     this.worldMapCanvas.addEventListener('click', (e) => {
@@ -126,7 +137,9 @@ export class UIController {
   cyclePauseTab(dir) {
     const idx = PAUSE_TABS.indexOf(this.g.pauseTab);
     this.g.pauseTab = PAUSE_TABS[(idx + dir + PAUSE_TABS.length) % PAUSE_TABS.length];
+    this._renderedTabSig = '';
     this.sound.playClick();
+    this.update();
   }
 
   update() {
@@ -134,13 +147,21 @@ export class UIController {
     this.hudEl.classList.toggle('hidden', mode !== 'play');
     this.pauseEl.classList.toggle('hidden', mode !== 'pause');
     this.startEl.classList.toggle('hidden', mode !== 'start');
+    this.shopModalEl.classList.toggle('hidden', mode !== 'play' || !this.g.activeShop);
 
     if (mode === 'play') {
       this._updateInGameHUD();
       this._drawMinimap();
+      if (this.g.activeShop) {
+        this._updateShopModal();
+      } else {
+        this._renderedShopSig = '';
+      }
     } else if (mode === 'pause') {
       this._updatePauseScreen();
-      this._drawWorldMap();
+      if (this.g.pauseTab === 'STATS' || this.g.pauseTab === 'MAP') {
+        this._drawWorldMap();
+      }
     } else if (mode === 'start') {
       this._updateStartSlots();
     }
@@ -211,7 +232,15 @@ export class UIController {
     document.getElementById('hud-ar-fill').style.width = `${Math.max(0, Math.min(100, g.armour))}%`;
     document.getElementById('hud-ar-val').textContent = Math.round(g.armour);
 
-    // Bottom-Center Dialogue Card
+    // Bottom-Center Interactive World Prompt & Dialogue Card
+    const promptEl = document.getElementById('hud-interact-prompt');
+    if (promptEl) {
+      const showPrompt = !g.shotMode && !g.activeShop && !!g.nearbyLocation;
+      promptEl.classList.toggle('hidden', !showPrompt);
+      if (showPrompt) {
+        promptEl.textContent = `PRESS [E] · ${g.nearbyLocation.name} (${g.nearbyLocation.subtitle})`;
+      }
+    }
     const dlgEl = document.getElementById('hud-dialogue');
     dlgEl.classList.toggle('hidden', !g.dialogue || g.dialogue.timer <= 0);
     if (g.dialogue) {
@@ -439,50 +468,364 @@ export class UIController {
     document.getElementById('pause-cash').textContent = `$${Math.round(g.cash).toLocaleString()}`;
 
     const tabsEl = document.getElementById('pause-tabs');
-    tabsEl.innerHTML = PAUSE_TABS.map((t) =>
-      `<button class="p-tab ${t === g.pauseTab ? 'active' : ''}" data-tab="${t}">${t}</button>`
-    ).join('');
-    tabsEl.querySelectorAll('.p-tab').forEach((btn) => {
-      btn.onclick = () => {
-        g.pauseTab = btn.dataset.tab;
-        this.sound.playClick();
-      };
-    });
+    if (tabsEl.dataset.activeTab !== g.pauseTab) {
+      tabsEl.dataset.activeTab = g.pauseTab;
+      tabsEl.innerHTML = PAUSE_TABS.map((t) =>
+        `<button class="p-tab ${t === g.pauseTab ? 'active' : ''}" data-tab="${t}">${t}</button>`
+      ).join('');
+      tabsEl.querySelectorAll('.p-tab').forEach((btn) => {
+        btn.onclick = () => {
+          g.pauseTab = btn.dataset.tab;
+          this._renderedTabSig = '';
+          this.sound.playClick();
+          this.update();
+        };
+      });
+    }
 
-    document.getElementById('pause-rank-title').textContent = `RANK ${g.rank} · ${g.rankTitle}`;
-    document.getElementById('pause-rank-rp').textContent = `${g.rp.toLocaleString()} / ${g.rpNext.toLocaleString()} RP`;
-    document.getElementById('pause-rank-fill').style.width = `${Math.min(100, (g.rp / g.rpNext) * 100)}%`;
+    const isStats = g.pauseTab === 'STATS';
+    this.statsViewEl.classList.toggle('hidden', !isStats);
+    this.tabViewEl.classList.toggle('hidden', isStats);
 
-    const c = g.career;
-    const metrics = [
-      ['Contracts Cleared', c.missionsCleared],
-      ['Pursuits Escaped', c.pursuitsEscaped],
-      ['Top Speed', `${c.topSpeedKmh} km/h`],
-      ['Takedowns', c.takedowns],
-      ['Cars Boosted', c.vehiclesBoosted],
-      ['Allied Districts', `${c.districtsFriendly} / 7`],
-      ['Crew Assists', c.crewAssists],
-      ['Time Played', c.playTime],
-    ];
-    document.getElementById('pause-career-grid').innerHTML = metrics.map(([k, v]) => `
-      <div class="career-cell"><div class="career-k">${k}</div><div class="career-v">${v}</div></div>
-    `).join('');
+    if (isStats) {
+      document.getElementById('pause-rank-title').textContent = `RANK ${g.rank} · ${g.rankTitle}`;
+      document.getElementById('pause-rank-rp').textContent = `${g.rp.toLocaleString()} / ${g.rpNext.toLocaleString()} RP`;
+      document.getElementById('pause-rank-fill').style.width = `${Math.min(100, (g.rp / g.rpNext) * 100)}%`;
 
-    const slotsEl = document.getElementById('pause-save-slots');
-    slotsEl.innerHTML = g.saves.map((s) => `
-      <div class="save-row">
-        <div class="save-info">
-          <div class="save-t">SLOT ${s.slot} · ${s.occupied ? s.district : 'EMPTY'}</div>
-          <div class="save-s">${s.occupied ? `$${s.cash.toLocaleString()} · ${s.time}` : 'Available slot'}</div>
+      const c = g.career;
+      const metrics = [
+        ['Contracts Cleared', c.missionsCleared],
+        ['Pursuits Escaped', c.pursuitsEscaped],
+        ['Top Speed', `${c.topSpeedKmh} km/h`],
+        ['Takedowns', c.takedowns],
+        ['Cars Boosted', c.vehiclesBoosted],
+        ['Allied Districts', `${c.districtsFriendly} / 7`],
+        ['Crew Assists', c.crewAssists],
+        ['Time Played', c.playTime],
+      ];
+      document.getElementById('pause-career-grid').innerHTML = metrics.map(([k, v]) => `
+        <div class="career-cell"><div class="career-k">${k}</div><div class="career-v">${v}</div></div>
+      `).join('');
+
+      const slotsEl = document.getElementById('pause-save-slots');
+      slotsEl.innerHTML = g.saves.map((s) => `
+        <div class="save-row">
+          <div class="save-info">
+            <div class="save-t">SLOT ${s.slot} · ${s.occupied ? s.district : 'EMPTY'}</div>
+            <div class="save-s">${s.occupied ? `$${s.cash.toLocaleString()} · ${s.time}` : 'Available slot'}</div>
+          </div>
+          <button class="save-btn" data-save="${s.slot}">SAVE</button>
         </div>
-        <button class="save-btn" data-save="${s.slot}">SAVE</button>
-      </div>
-    `).join('');
-    slotsEl.querySelectorAll('.save-btn').forEach((btn) => {
-      btn.onclick = () => g.saveToSlot(Number(btn.dataset.save));
-    });
+      `).join('');
+      slotsEl.querySelectorAll('.save-btn').forEach((btn) => {
+        btn.onclick = () => g.saveToSlot(Number(btn.dataset.save));
+      });
 
-    document.getElementById('map-waypoint-pill').textContent = `WAYPOINT · ${g.waypoint.label}`;
+      document.getElementById('map-waypoint-pill').textContent = `WAYPOINT · ${g.waypoint.label}`;
+    } else {
+      const sig = `${g.pauseTab}:${Math.round(g.cash)}:${g.crew.map((x) => x.level).join(',')}:${g.saves.map((s) => (s.occupied ? s.time : '0')).join(',')}:${g.settings.graphics}:${g.settings.timeOfDay}:${g.settings.cameraFov}:${this.sound.muted}`;
+      if (this._renderedTabSig !== sig) {
+        this._renderedTabSig = sig;
+        this._renderPauseTabContent(g.pauseTab);
+      }
+    }
+  }
+
+  _renderPauseTabContent(tab) {
+    const g = this.g;
+    const view = this.tabViewEl;
+
+    if (tab === 'MAP') {
+      view.innerHTML = `
+        <div class="panel-title">CORALINA BAY INTERACTIVE GPS &amp; DISTRICTS</div>
+        <div class="tab-grid-2" style="flex:1;">
+          <div class="dossier-card">
+            <div class="dossier-title">FAST-WAYPOINT DESTINATIONS</div>
+            <div class="dossier-sub">Click any district or interactive shop to lock GPS navigation on your radar.</div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+              ${DISTRICTS.map((d) => `
+                <div class="setting-row" style="padding:6px 10px;">
+                  <div>
+                    <div style="font-size:11px;font-weight:900;color:${d.color}">${d.name}</div>
+                    <div style="font-size:9.5px;color:#94a3b8">${d.subtitle} · ${d.status} (${d.standing})</div>
+                  </div>
+                  <button class="action-btn cyan" data-wp-x="${(d.bounds.xMin + d.bounds.xMax) / 2}" data-wp-z="${(d.bounds.zMin + d.bounds.zMax) / 2}" data-wp-label="${d.name}">SET GPS</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="dossier-card">
+            <div class="dossier-title">INTERACTIVE WORLD LOCATIONS [PRESS E]</div>
+            <div class="dossier-sub">Drive or walk into glowing neon rings in Coralina Bay and press E to access syndicate services.</div>
+            <div class="setting-row">
+              <div>
+                <div style="font-size:11.5px;font-weight:900;color:#22d3ee">MARINA GARAGE</div>
+                <div style="font-size:10px;color:#94a3b8">Marina Boulevard · Repair ($500), Body Paint ($750), Turbo Boost ($2,500)</div>
+              </div>
+              <button class="action-btn cyan" data-wp-x="-11.4" data-wp-z="10" data-wp-label="MARINA GARAGE">ROUTE</button>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div style="font-size:11.5px;font-weight:900;color:#fb7185">BAZAAR ARMS DEALER</div>
+                <div style="font-size:10px;color:#94a3b8">Mangrove Bazaar · Full Ammo ($600), Titanium Armor ($800), Medkit ($400)</div>
+              </div>
+              <button class="action-btn" data-wp-x="-36.5" data-wp-z="73.5" data-wp-label="BAZAAR ARMS DEALER">ROUTE</button>
+            </div>
+            <div class="dossier-sub" style="margin-top:auto;">Active Waypoint: <strong style="color:#fbbf24">${g.waypoint.label}</strong></div>
+          </div>
+        </div>`;
+      view.querySelectorAll('[data-wp-label]').forEach((btn) => {
+        btn.onclick = () => {
+          g.waypoint = { x: Number(btn.dataset.wpX), z: Number(btn.dataset.wpZ), label: btn.dataset.wpLabel };
+          this._renderedTabSig = '';
+          this.sound.playClick();
+        };
+      });
+    } else if (tab === 'STORY') {
+      view.innerHTML = `
+        <div class="panel-title">SYNDICATE STORY CONTRACTS · REPLAY &amp; BRIEFINGS</div>
+        <div class="tab-grid-3">
+          ${MISSIONS.map((m, idx) => `
+            <div class="dossier-card">
+              <div class="dossier-head">
+                <span class="stage-pill">MISSION ${m.num}</span>
+                <span style="font-size:10px;font-weight:800;color:${idx === g.missionIdx ? '#34d399' : '#94a3b8'}">${idx === g.missionIdx ? 'ACTIVE' : 'UNLOCKED'}</span>
+              </div>
+              <div class="dossier-title">${m.title}</div>
+              <div style="display:flex;flex-direction:column;gap:4px;margin:4px 0;">
+                ${m.stages.map((st, sIdx) => `
+                  <div style="font-size:10px;color:#cbd5e1;"><strong style="color:#fbbf24">${sIdx + 1}.</strong> ${st.title}</div>
+                `).join('')}
+              </div>
+              <div style="margin-top:auto;padding-top:6px;">
+                <button class="action-btn" style="width:100%" data-replay="${idx}">REPLAY MISSION</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+      view.querySelectorAll('[data-replay]').forEach((btn) => {
+        btn.onclick = () => g.replayMission(Number(btn.dataset.replay));
+      });
+    } else if (tab === 'CREW') {
+      view.innerHTML = `
+        <div class="panel-title">SYNDICATE CREW ROSTER &amp; ABILITY UPGRADES</div>
+        <div class="tab-grid-3">
+          ${g.crew.map((ab, idx) => {
+            const maxed = ab.level >= ab.maxLevel;
+            const canAfford = g.cash >= ab.upgradeCost;
+            return `<div class="dossier-card">
+              <div class="dossier-head">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div class="crew-portrait" style="width:42px;height:42px;">${portraitSvg(ab.role || 'netrunner')}</div>
+                  <div>
+                    <div class="dossier-title">${ab.crew.split(' · ')[0]}</div>
+                    <div style="font-size:10px;color:${ab.accent};font-weight:800;">${ab.name} [${ab.key}]</div>
+                  </div>
+                </div>
+                <span class="rank-pill">LVL ${ab.level}/${ab.maxLevel}</span>
+              </div>
+              <div class="dossier-sub">${ab.bio || ''}</div>
+              <div style="font-size:10.5px;color:#cbd5e1;">Cooldown: <strong style="color:#fbbf24">${ab.maxCd}s</strong></div>
+              <button class="action-btn" style="margin-top:auto;" data-upgrade="${idx}" ${maxed || !canAfford ? 'disabled' : ''}>
+                ${maxed ? 'MAX LEVEL' : `UPGRADE ($${ab.upgradeCost.toLocaleString()})`}
+              </button>
+            </div>`;
+          }).join('')}
+        </div>`;
+      view.querySelectorAll('[data-upgrade]').forEach((btn) => {
+        btn.onclick = () => {
+          if (g.upgradeCrew(Number(btn.dataset.upgrade))) this._renderedTabSig = '';
+        };
+      });
+    } else if (tab === 'SETTINGS') {
+      view.innerHTML = `
+        <div class="panel-title">AUDIO, GRAPHICS &amp; CAMERA SETTINGS</div>
+        <div class="tab-grid-2">
+          <div class="dossier-card">
+            <div class="dossier-title">AUDIO MIXER</div>
+            <div class="setting-row">
+              <span>Master Audio</span>
+              <button id="set-mute-btn" class="action-btn cyan">${this.sound.muted ? 'MUTED' : 'ENABLED'}</button>
+            </div>
+            <div class="setting-row">
+              <span>Master Volume (${Math.round(this.sound.masterVol * 100)}%)</span>
+              <input id="set-master-vol" type="range" min="0" max="100" value="${Math.round(this.sound.masterVol * 100)}" />
+            </div>
+            <div class="setting-row">
+              <span>Radio Volume (${Math.round(this.sound.musicVol * 100)}%)</span>
+              <input id="set-music-vol" type="range" min="0" max="100" value="${Math.round(this.sound.musicVol * 100)}" />
+            </div>
+            <div class="setting-row">
+              <span>SFX Volume (${Math.round(this.sound.sfxVol * 100)}%)</span>
+              <input id="set-sfx-vol" type="range" min="0" max="100" value="${Math.round(this.sound.sfxVol * 100)}" />
+            </div>
+          </div>
+          <div class="dossier-card">
+            <div class="dossier-title">DISPLAY &amp; CAMERA</div>
+            <div class="setting-row">
+              <span>Graphics Quality</span>
+              <div style="display:flex;gap:6px;">
+                ${['LOW', 'MEDIUM', 'HIGH'].map((q) => `
+                  <button class="action-btn ${g.settings.graphics === q ? '' : 'cyan'}" data-gfx="${q}">${q}</button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>Camera FOV (${g.settings.cameraFov}°)</span>
+              <input id="set-fov" type="range" min="48" max="74" value="${g.settings.cameraFov}" />
+            </div>
+            <div class="setting-row">
+              <span>Atmosphere / Time</span>
+              <div style="display:flex;gap:6px;">
+                <button class="action-btn ${g.settings.timeOfDay === 'sunset' ? '' : 'cyan'}" data-tod="sunset">SUNSET</button>
+                <button class="action-btn ${g.settings.timeOfDay === 'night' ? '' : 'cyan'}" data-tod="night">NIGHT</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      view.querySelector('#set-mute-btn').onclick = () => {
+        this.sound.setMuted(!this.sound.muted);
+        this._renderedTabSig = '';
+      };
+      view.querySelector('#set-master-vol').oninput = (e) => this.sound.setMasterVolume(Number(e.target.value) / 100);
+      view.querySelector('#set-music-vol').oninput = (e) => this.sound.setMusicVolume(Number(e.target.value) / 100);
+      view.querySelector('#set-sfx-vol').oninput = (e) => this.sound.setSfxVolume(Number(e.target.value) / 100);
+      view.querySelector('#set-fov').oninput = (e) => g.applySettings({ cameraFov: Number(e.target.value) });
+      view.querySelectorAll('[data-gfx]').forEach((b) => {
+        b.onclick = () => { g.applySettings({ graphics: b.dataset.gfx }); this._renderedTabSig = ''; };
+      });
+      view.querySelectorAll('[data-tod]').forEach((b) => {
+        b.onclick = () => { g.applySettings({ timeOfDay: b.dataset.tod }); this._renderedTabSig = ''; };
+      });
+    } else if (tab === 'CONTROLS') {
+      const binds = [
+        ['W / A / S / D', 'Drive Vehicle / Move On-Foot'],
+        ['SHIFT', 'Sprint / Nitro Boost (with Turbo)'],
+        ['SPACE', 'Handbrake Drift / Fire Weapon'],
+        ['LEFT CLICK', 'Fire Equipped Weapon'],
+        ['F', 'Enter / Exit Nearest Vehicle'],
+        ['E', 'Interact (Marina Garage / Arms Dealer)'],
+        ['1 – 5', 'Select Weapon Slot (Brawl, 9mm, SMG, 12G, AR)'],
+        ['Z / X / C', 'Trigger Crew Abilities (Blackout, Nitro, Flare)'],
+        ['R', 'Cycle Coralina Bay Radio Station'],
+        ['CTRL', 'Crouch / Hard Cover'],
+        ['ESC / M', 'Open Pause Dossier & World Map'],
+        ['Q / E (Pause)', 'Switch Between All 7 Dossier Tabs'],
+      ];
+      view.innerHTML = `
+        <div class="panel-title">KEYBOARD &amp; MOUSE CONTROLS</div>
+        <div class="tab-grid-2">
+          ${binds.map(([k, desc]) => `
+            <div class="setting-row">
+              <span class="key-badge">${k}</span>
+              <span style="font-size:11px;color:#e2e8f0;">${desc}</span>
+            </div>
+          `).join('')}
+        </div>`;
+    } else if (tab === 'SAVE') {
+      view.innerHTML = `
+        <div class="panel-title">LOCAL SAVE MANAGER (3 SLOTS · OFFLINE STORAGE)</div>
+        <div class="tab-grid-3">
+          ${g.saves.map((s) => `
+            <div class="dossier-card" style="border-top:3px solid ${s.accent}">
+              <div class="dossier-title">SLOT ${s.slot} · ${s.occupied ? s.act : 'EMPTY SLOT'}</div>
+              <div class="dossier-sub">
+                ${s.occupied ? `${s.district} · $${s.cash.toLocaleString()} · Rank ${s.rank} · ${s.time}` : 'No saved syndicate progress in this slot.'}
+              </div>
+              <div style="display:flex;gap:6px;margin-top:auto;padding-top:8px;">
+                <button class="action-btn cyan" style="flex:1" data-slot-save="${s.slot}">SAVE</button>
+                <button class="action-btn" style="flex:1" data-slot-load="${s.slot}" ${s.occupied ? '' : 'disabled'}>LOAD</button>
+                <button class="action-btn danger" data-slot-del="${s.slot}" ${s.occupied ? '' : 'disabled'}>DEL</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+      view.querySelectorAll('[data-slot-save]').forEach((b) => {
+        b.onclick = () => { g.saveToSlot(Number(b.dataset.slotSave)); this._renderedTabSig = ''; };
+      });
+      view.querySelectorAll('[data-slot-load]').forEach((b) => {
+        b.onclick = () => { g.loadFromSlot(Number(b.dataset.slotLoad)); };
+      });
+      view.querySelectorAll('[data-slot-del]').forEach((b) => {
+        b.onclick = () => { g.deleteSlot(Number(b.dataset.slotDel)); this._renderedTabSig = ''; };
+      });
+    }
+  }
+
+  _updateShopModal() {
+    const g = this.g;
+    const sig = `${g.activeShop}:${Math.round(g.cash)}:${Math.round(g.health)}:${Math.round(g.armour)}:${g.turboInstalled}:${Math.round(g.heroVehicle.damagePct)}`;
+    if (this._renderedShopSig === sig) return;
+    this._renderedShopSig = sig;
+
+    document.getElementById('shop-cash').textContent = `$${Math.round(g.cash).toLocaleString()}`;
+    const body = document.getElementById('shop-body');
+
+    if (g.activeShop === 'garage') {
+      document.getElementById('shop-title').textContent = 'MARINA GARAGE';
+      document.getElementById('shop-sub').textContent = 'Coralina Bay Custom Tuning & Bodywork';
+      const swatches = [
+        { name: 'Coral Red', hex: 0xe11d48, css: '#e11d48' },
+        { name: 'Sunset Gold', hex: 0xf59e0b, css: '#f59e0b' },
+        { name: 'Electric Cyan', hex: 0x06b6d4, css: '#06b6d4' },
+        { name: 'Midnight Violet', hex: 0x7c3aed, css: '#7c3aed' },
+        { name: 'Pearl White', hex: 0xf1f5f9, css: '#f1f5f9' },
+      ];
+      body.innerHTML = `
+        <div class="setting-row">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;">Full Chassis Repair (${Math.max(0, 100 - Math.round(g.heroVehicle.damagePct))}% Intact)</div>
+            <div style="font-size:10px;color:#94a3b8;">Restore vehicle hull integrity to 100%</div>
+          </div>
+          <button id="buy-repair" class="action-btn cyan" ${g.cash < 500 || g.heroVehicle.damagePct <= 0 ? 'disabled' : ''}>REPAIR $500</button>
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;">
+          <div style="font-size:11.5px;font-weight:800;">Respray Body Paint ($750)</div>
+          <div class="swatch-row">
+            ${swatches.map((sw) => `<button class="swatch-btn" title="${sw.name}" data-paint="${sw.hex}" style="background:${sw.css}"></button>`).join('')}
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;">Twin-Stage Turbo Boost</div>
+            <div style="font-size:10px;color:#94a3b8;">Increases top speed &amp; unlocks nitro afterburners</div>
+          </div>
+          <button id="buy-turbo" class="action-btn" ${g.turboInstalled || g.cash < 2500 ? 'disabled' : ''}>${g.turboInstalled ? 'INSTALLED' : 'INSTALL $2,500'}</button>
+        </div>`;
+      body.querySelector('#buy-repair').onclick = () => g.buyGarageService('repair');
+      body.querySelector('#buy-turbo').onclick = () => g.buyGarageService('turbo');
+      body.querySelectorAll('[data-paint]').forEach((b) => {
+        b.onclick = () => g.buyGarageService('paint', Number(b.dataset.paint));
+      });
+    } else if (g.activeShop === 'arms') {
+      document.getElementById('shop-title').textContent = 'BAZAAR ARMS DEALER';
+      document.getElementById('shop-sub').textContent = 'Mangrove Bazaar Black-Market Outfitter';
+      body.innerHTML = `
+        <div class="setting-row">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;">Refill All Weapon Ammo</div>
+            <div style="font-size:10px;color:#94a3b8;">Top off 9mm, Viper SMG, Tidal 12G &amp; Syndicate AR</div>
+          </div>
+          <button id="buy-ammo" class="action-btn cyan" ${g.cash < 600 ? 'disabled' : ''}>BUY $600</button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;">Titanium Body Armor (${Math.round(g.armour)}%)</div>
+            <div style="font-size:10px;color:#94a3b8;">Refill ballistic vest armor to 100%</div>
+          </div>
+          <button id="buy-armor" class="action-btn" ${g.cash < 800 || g.armour >= 100 ? 'disabled' : ''}>BUY $800</button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;">Trauma Medkit (${Math.round(g.health)}% HP)</div>
+            <div style="font-size:10px;color:#94a3b8;">Restore health to 100%</div>
+          </div>
+          <button id="buy-medkit" class="action-btn cyan" ${g.cash < 400 || g.health >= 100 ? 'disabled' : ''}>BUY $400</button>
+        </div>`;
+      body.querySelector('#buy-ammo').onclick = () => g.buyArmsService('ammo');
+      body.querySelector('#buy-armor').onclick = () => g.buyArmsService('armor');
+      body.querySelector('#buy-medkit').onclick = () => g.buyArmsService('medkit');
+    }
   }
 
   // Organic coastal peninsula & island archipelago map with Bay Suspension Bridge

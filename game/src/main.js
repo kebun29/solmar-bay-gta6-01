@@ -18,10 +18,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.2, 600);
 
-const world = new World(scene);
+const world = new World(scene, renderer);
 const vfx = new VFXManager(scene);
 const sound = new SoundEngine();
-const gameplay = new Gameplay(scene, world, vfx, sound, camera);
+const gameplay = new Gameplay(scene, world, vfx, sound, camera, renderer);
 const ui = new UIController(gameplay, sound);
 
 // Parse ?shot= query
@@ -47,6 +47,10 @@ window.addEventListener('keydown', (e) => {
   sound.unlock();
 
   if (k === 'escape' || k === 'm') {
+    if (gameplay.activeShop) {
+      gameplay.closeShop();
+      return;
+    }
     if (gameplay.mode === 'play') {
       gameplay.mode = 'pause';
       sound.playClick();
@@ -64,6 +68,12 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (gameplay.mode !== 'play') return;
+
+  if (k === 'e') {
+    gameplay.interactNearby();
+    return;
+  }
+  if (gameplay.activeShop) return;
 
   if (k === 'w' || k === 'arrowup') gameplay.input.w = true;
   if (k === 's' || k === 'arrowdown') gameplay.input.s = true;
