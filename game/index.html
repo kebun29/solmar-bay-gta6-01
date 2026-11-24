@@ -13,16 +13,16 @@
   </script>
   <style>
     :root {
-      --glass: rgba(8, 12, 22, 0.76);
-      --glass-strong: rgba(7, 11, 20, 0.88);
-      --border: rgba(255, 255, 255, 0.14);
+      --glass: rgba(7, 11, 22, 0.84);
+      --glass-strong: rgba(6, 10, 20, 0.92);
+      --border: rgba(255, 255, 255, 0.22);
       --coral: #fb7185;
       --sunset: #f97316;
       --gold: #fbbf24;
       --cyan: #22d3ee;
       --mint: #34d399;
       --text: #f8fafc;
-      --muted: #94a3b8;
+      --muted: #cbd5e1;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
@@ -500,16 +500,28 @@
 
     /* Interactive World Prompt & Shop Modal */
     .interact-prompt {
-      position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%);
-      padding: 7px 16px; border-radius: 999px;
-      background: rgba(8, 12, 22, 0.9); border: 1.5px solid var(--cyan);
-      color: #ffffff; font-size: 11px; font-weight: 900; letter-spacing: 0.1em;
-      box-shadow: 0 0 20px rgba(34, 211, 238, 0.35);
+      position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+      padding: 9px 20px; border-radius: 999px;
+      background: rgba(6, 11, 22, 0.92); border: 2px solid var(--cyan);
+      color: #ffffff; font-size: 12.5px; font-weight: 900; letter-spacing: 0.11em;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 0 22px rgba(34, 211, 238, 0.42);
+      white-space: nowrap;
     }
     #shop-modal {
       position: fixed; inset: 0; z-index: 25;
       background: rgba(6, 10, 18, 0.72); backdrop-filter: blur(8px);
       display: flex; align-items: center; justify-content: center;
+    }
+    #shop-modal.garage-docked {
+      inset: auto 14px 14px auto;
+      background: transparent;
+      backdrop-filter: none;
+      display: block;
+    }
+    #shop-modal.garage-docked .shop-box {
+      width: 344px;
+      padding: 13px 15px;
+      gap: 9px;
     }
     .shop-box {
       width: 480px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
